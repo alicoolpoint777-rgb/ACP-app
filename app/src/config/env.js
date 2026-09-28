@@ -12,7 +12,7 @@
 //
 // The fallbacks below keep local development working out of the box.
 
-const FALLBACK_API_URL = 'http://192.168.1.10:5000/api';
+const FALLBACK_API_URL = 'https://ali-bhi-app-backend.onrender.com/api';
 const FALLBACK_GOOGLE_WEB_CLIENT_ID =
   '245458778051-23rdejm0b384kgqhj7dk392hkeasdfp6.apps.googleusercontent.com';
 
