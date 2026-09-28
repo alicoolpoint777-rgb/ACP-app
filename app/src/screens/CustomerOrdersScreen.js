@@ -1,54 +1,84 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { AuthContext } from '../context/AuthContext';
+import api from '../services/api';
 
 const { width } = Dimensions.get('window');
 
-const DEMO_ORDERS = [
-  { id: '1', type: 'Service', title: 'Deep Cleaning', status: 'Pending', date: 'Oct 25, 2026', time: '10:00 AM', tech: 'Unassigned', price: 'Rs 2,500' },
-  { id: '2', type: 'Product', title: 'PEL Inverter AC 1.5 Ton', status: 'In Transit', date: 'Oct 24, 2026', time: '-', tech: 'Courier', price: 'Rs 145,000' },
-];
-
 export default function CustomerOrdersScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('Active');
-  const { logout } = useContext(AuthContext);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const { userData, logout } = useContext(AuthContext);
+
+  const fetchCustomerBookings = async () => {
+    try {
+      const res = await api.get('/bookings');
+      if (res.data?.success) {
+        setBookings(res.data.bookings || []);
+      }
+    } catch (err) {
+      console.log('Error fetching customer bookings:', err?.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomerBookings();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchCustomerBookings();
+  };
+
+  const activeBookings = bookings.filter(b => 
+    ['pending', 'confirmed', 'assigned', 'in_progress'].includes(b.status)
+  );
+  const historyBookings = bookings.filter(b => 
+    ['completed', 'cancelled'].includes(b.status)
+  );
+
+  const displayedList = activeTab === 'Active' ? activeBookings : historyBookings;
 
   const renderOrderCard = (order) => (
-    <View key={order.id} style={styles.card}>
+    <View key={order._id || order.id} style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{order.type}</Text>
+          <Text style={styles.typeText}>{order.bookingNo || 'Service'}</Text>
         </View>
-        <Text style={[styles.statusText, order.status === 'Pending' ? styles.pendingText : styles.transitText]}>
-          {order.status}
+        <Text style={[styles.statusText, order.status === 'pending' ? styles.pendingText : styles.transitText]}>
+          {(order.status || 'Active').toUpperCase()}
         </Text>
       </View>
       
-      <Text style={styles.title}>{order.title}</Text>
+      <Text style={styles.title}>{order.serviceName || 'AC Service'}</Text>
       
       <View style={styles.detailsRow}>
         <View style={styles.detailItem}>
           <Ionicons name="calendar-outline" size={16} color="#888" />
-          <Text style={styles.detailText}>{order.date}</Text>
+          <Text style={styles.detailText}>
+            {order.scheduledDate ? new Date(order.scheduledDate).toLocaleDateString() : 'Scheduled'}
+          </Text>
         </View>
         <View style={styles.detailItem}>
           <Ionicons name="time-outline" size={16} color="#888" />
-          <Text style={styles.detailText}>{order.time}</Text>
+          <Text style={styles.detailText}>{order.timeSlot || 'Flexible'}</Text>
         </View>
       </View>
 
       <View style={styles.footerRow}>
-        <Text style={styles.price}>{order.price}</Text>
+        <Text style={styles.price}>{order.price ? `Rs ${order.price.toLocaleString()}` : 'Rs 2,500'}</Text>
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.cancelBtn}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.trackBtn}>
-            <Text style={styles.trackBtnText}>Track</Text>
-          </TouchableOpacity>
+          <View style={styles.trackBtn}>
+            <Text style={styles.trackBtnText}>{order.status === 'completed' ? 'Done' : 'Active'}</Text>
+          </View>
         </View>
       </View>
     </View>
@@ -64,18 +94,22 @@ export default function CustomerOrdersScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+      >
         {/* Profile Info */}
         <View style={styles.profileSection}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>D</Text>
+            <Text style={styles.avatarText}>{(userData?.name || 'C').slice(0, 1).toUpperCase()}</Text>
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>Demo Customer</Text>
-            <Text style={styles.profileEmail}>demo@123.com</Text>
+            <Text style={styles.profileName}>{userData?.name || 'Customer'}</Text>
+            <Text style={styles.profileEmail}>{userData?.email || 'customer@acp.com'}</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>2</Text>
+            <Text style={styles.statValue}>{activeBookings.length}</Text>
             <Text style={styles.statLabel}>Active Orders</Text>
           </View>
         </View>
@@ -94,12 +128,14 @@ export default function CustomerOrdersScreen({ navigation }) {
         </View>
 
         {/* List */}
-        {activeTab === 'Active' ? (
-          DEMO_ORDERS.map(renderOrderCard)
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+        ) : displayedList.length > 0 ? (
+          displayedList.map(renderOrderCard)
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="receipt-outline" size={60} color="#CCC" />
-            <Text style={styles.emptyText}>No past orders found.</Text>
+            <Text style={styles.emptyText}>No {activeTab.toLowerCase()} orders found.</Text>
           </View>
         )}
       </ScrollView>

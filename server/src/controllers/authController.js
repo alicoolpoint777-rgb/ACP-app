@@ -188,6 +188,44 @@ const googleLogin = asyncHandler(async (req, res) => {
   res.json(authPayload(user, token));
 });
 
+// @desc  Get all registered customers
+// @route GET /api/auth/customers
+// @access Private (admin)
+const listCustomers = asyncHandler(async (req, res) => {
+  const Booking = require('../models/Booking');
+  const customers = await User.find({ role: 'customer' })
+    .select('-password')
+    .sort({ createdAt: -1 });
+
+  const enriched = await Promise.all(
+    customers.map(async (c) => {
+      const bookings = await Booking.find({ customer: c._id });
+      const activeContracts = bookings.filter((b) =>
+        ['pending', 'confirmed', 'assigned', 'in_progress'].includes(b.status)
+      ).length;
+      const totalSpent = bookings
+        .filter((b) => b.status === 'completed' || b.isPaid)
+        .reduce((sum, b) => sum + (b.price || 0), 0);
+
+      return {
+        id: c._id.toString(),
+        _id: c._id.toString(),
+        name: c.name,
+        email: c.email,
+        phone: c.phone || 'N/A',
+        type: c.company ? 'Corporate' : 'Residential',
+        sector: c.sector || (c.company ? 'Corporate' : 'Residential'),
+        activeContracts,
+        value: totalSpent > 0 ? `Rs ${totalSpent.toLocaleString()}` : `Rs 0`,
+        initial: (c.name || 'C').slice(0, 2).toUpperCase(),
+        color: c.company ? '#002B5B' : '#007BFF',
+      };
+    })
+  );
+
+  res.json({ success: true, count: enriched.length, customers: enriched });
+});
+
 module.exports = {
   signup,
   login,
@@ -196,4 +234,6 @@ module.exports = {
   updateMe,
   changePassword,
   registerPushToken,
+  listCustomers,
 };
+

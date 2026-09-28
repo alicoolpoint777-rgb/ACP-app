@@ -1,7 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { signup, login, googleLogin, me, updateMe, changePassword, registerPushToken } = require('../controllers/authController');
-const { protect } = require('../middleware/auth');
+const {
+  signup,
+  login,
+  googleLogin,
+  me,
+  updateMe,
+  changePassword,
+  registerPushToken,
+  listCustomers,
+} = require('../controllers/authController');
+const { protect, authorize } = require('../middleware/auth');
 
 router.post('/signup', signup);
 router.post('/login', login);
@@ -12,5 +21,7 @@ router.get('/me', me);
 router.put('/me', updateMe);
 router.put('/password', changePassword);
 router.post('/push-token', registerPushToken);
+router.get('/customers', authorize('admin'), listCustomers);
 
 module.exports = router;
+

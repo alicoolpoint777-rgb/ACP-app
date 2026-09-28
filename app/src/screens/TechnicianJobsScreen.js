@@ -1,22 +1,40 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState, useContext } from 'react';
+import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../theme/colors';
+import { AuthContext } from '../context/AuthContext';
+import api from '../services/api';
 
 const { width } = Dimensions.get('window');
 
-const ASSIGNED_JOBS = [
-  { id: '1', title: 'Deep Cleaning', address: 'Block 4, Clifton', time: '10:00 AM - 12:00 PM', priority: 'High', date: 'August 25' },
-  { id: '2', title: 'Gas Charging', address: 'DHA Phase 6', time: '02:00 PM - 04:00 PM', priority: 'Medium', date: 'August 25' },
-];
-
 export default function TechnicianJobsScreen({ navigation }) {
+  const { userData, logout } = useContext(AuthContext);
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
   const cardTranslateYValues = useRef([new Animated.Value(50), new Animated.Value(50), new Animated.Value(50)]).current;
   const cardOpacityValues = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
 
+  const fetchJobs = async () => {
+    try {
+      const res = await api.get('/bookings');
+      if (res.data?.success) {
+        setJobs(res.data.bookings || []);
+      }
+    } catch (err) {
+      console.log('Error fetching technician jobs:', err?.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
+    fetchJobs();
+
     const animations = cardTranslateYValues.map((val, index) => {
       return Animated.parallel([
         Animated.timing(val, {
@@ -35,21 +53,33 @@ export default function TechnicianJobsScreen({ navigation }) {
     Animated.stagger(150, animations).start();
   }, []);
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchJobs();
+  };
+
+  const assignedCount = jobs.length;
+  const completedCount = jobs.filter(j => j.status === 'completed').length;
+  const pendingCount = jobs.filter(j => j.status !== 'completed').length;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Hello Ali 👋</Text>
+          <Text style={styles.greeting}>Hello {userData?.name || 'Technician'} 👋</Text>
           <Text style={styles.title}>Manage Your{'\n'}Assigned Jobs</Text>
         </View>
-        <TouchableOpacity style={styles.notificationBtn}>
-          <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
-          <View style={styles.notificationDot} />
+        <TouchableOpacity style={styles.notificationBtn} onPress={logout}>
+          <Ionicons name="log-out-outline" size={24} color="#FF4757" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFF" />}
+      >
         
         {/* Bento Box Stats */}
         <View style={styles.bentoContainer}>
@@ -59,7 +89,7 @@ export default function TechnicianJobsScreen({ navigation }) {
             <Ionicons name="briefcase" size={40} color="#FFF" />
             <View style={styles.bentoTextWrapper}>
               <Text style={styles.bentoTitleLight}>Assigned</Text>
-              <Text style={styles.bentoSubLight}>4 Jobs Today</Text>
+              <Text style={styles.bentoSubLight}>{assignedCount} Jobs</Text>
             </View>
           </Animated.View>
 
@@ -69,7 +99,7 @@ export default function TechnicianJobsScreen({ navigation }) {
               <Ionicons name="checkmark-circle" size={28} color="#48BB78" />
               <View style={styles.bentoTextWrapperRow}>
                 <Text style={styles.bentoTitleLightSmall}>Completed</Text>
-                <Text style={styles.bentoSubLightSmall}>2 Jobs</Text>
+                <Text style={styles.bentoSubLightSmall}>{completedCount} Jobs</Text>
               </View>
             </Animated.View>
 
@@ -77,7 +107,7 @@ export default function TechnicianJobsScreen({ navigation }) {
               <Ionicons name="time" size={28} color="#ECC94B" />
               <View style={styles.bentoTextWrapperRow}>
                 <Text style={styles.bentoTitleLightSmall}>Pending</Text>
-                <Text style={styles.bentoSubLightSmall}>2 Jobs</Text>
+                <Text style={styles.bentoSubLightSmall}>{pendingCount} Jobs</Text>
               </View>
             </Animated.View>
           </View>
@@ -86,60 +116,74 @@ export default function TechnicianJobsScreen({ navigation }) {
         {/* Ongoing Jobs List */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Ongoing Jobs</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAll}>See All</Text>
+          <TouchableOpacity onPress={onRefresh}>
+            <Text style={styles.seeAll}>Refresh</Text>
           </TouchableOpacity>
         </View>
 
-        {ASSIGNED_JOBS.map((job) => (
-          <TouchableOpacity key={job.id} activeOpacity={0.9} style={styles.jobCard} onPress={() => navigation.navigate('JobDetails', { job })}>
-            <View style={styles.jobHeader}>
-              <View style={[styles.badge, job.priority === 'High' ? styles.badgeHigh : styles.badgeMedium]}>
-                <Text style={styles.badgeText}>{job.priority}</Text>
-              </View>
-              <TouchableOpacity>
-                <Ionicons name="ellipsis-horizontal" size={20} color="#888" />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={styles.jobTitle}>{job.title}</Text>
-            
-            <View style={styles.jobInfoGrid}>
-              <View style={styles.jobInfoItem}>
-                <Ionicons name="time-outline" size={16} color="#A0AEC0" />
-                <Text style={styles.jobInfoText}>{job.time}</Text>
-              </View>
-              <View style={styles.jobInfoItem}>
-                <Ionicons name="calendar-outline" size={16} color="#A0AEC0" />
-                <Text style={styles.jobInfoText}>{job.date}</Text>
-              </View>
-              <View style={[styles.jobInfoItem, { width: '100%', marginTop: 10 }]}>
-                <Ionicons name="location-outline" size={16} color="#A0AEC0" />
-                <Text style={styles.jobInfoText}>{job.address}</Text>
-              </View>
-            </View>
-
-            <View style={styles.jobFooter}>
-              <View style={styles.customerInfo}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>JD</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#63B3ED" style={{ marginTop: 30 }} />
+        ) : jobs.length === 0 ? (
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <Ionicons name="clipboard-outline" size={48} color="#A0AEC0" />
+            <Text style={{ color: '#A0AEC0', marginTop: 12, fontSize: 16 }}>No jobs assigned yet.</Text>
+          </View>
+        ) : (
+          jobs.map((job) => (
+            <TouchableOpacity 
+              key={job._id || job.id} 
+              activeOpacity={0.9} 
+              style={styles.jobCard} 
+              onPress={() => navigation.navigate('JobDetails', { job })}
+            >
+              <View style={styles.jobHeader}>
+                <View style={[styles.badge, job.status === 'in_progress' ? styles.badgeHigh : styles.badgeMedium]}>
+                  <Text style={styles.badgeText}>{job.status === 'in_progress' ? 'IN PROGRESS' : (job.status || 'ASSIGNED').toUpperCase()}</Text>
                 </View>
-                <View>
-                  <Text style={styles.customerName}>John Doe</Text>
-                  <Text style={styles.customerPhone}>+92 300 1234567</Text>
-                </View>
+                <Text style={{ color: '#63B3ED', fontWeight: 'bold' }}>{job.bookingNo || ''}</Text>
               </View>
               
-              <TouchableOpacity style={styles.startJobBtn} onPress={(e) => {
-                e.stopPropagation();
-                navigation.navigate('JobDetails', { job });
-              }}>
-                <Text style={styles.startJobText}>Start Job</Text>
-                <Ionicons name="arrow-forward" size={16} color="#FFF" style={{ marginLeft: 5 }} />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        ))}
+              <Text style={styles.jobTitle}>{job.serviceName || job.title}</Text>
+              
+              <View style={styles.jobInfoGrid}>
+                <View style={styles.jobInfoItem}>
+                  <Ionicons name="time-outline" size={16} color="#A0AEC0" />
+                  <Text style={styles.jobInfoText}>{job.timeSlot || job.time || 'Flexible'}</Text>
+                </View>
+                <View style={styles.jobInfoItem}>
+                  <Ionicons name="calendar-outline" size={16} color="#A0AEC0" />
+                  <Text style={styles.jobInfoText}>
+                    {job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : 'Today'}
+                  </Text>
+                </View>
+                <View style={[styles.jobInfoItem, { width: '100%', marginTop: 10 }]}>
+                  <Ionicons name="location-outline" size={16} color="#A0AEC0" />
+                  <Text style={styles.jobInfoText}>{job.address}</Text>
+                </View>
+              </View>
+
+              <View style={styles.jobFooter}>
+                <View style={styles.customerInfo}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{(job.customer?.name || 'C').slice(0, 2).toUpperCase()}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.customerName}>{job.customer?.name || 'Customer'}</Text>
+                    <Text style={styles.customerPhone}>{job.customer?.phone || 'No phone'}</Text>
+                  </View>
+                </View>
+                
+                <TouchableOpacity style={styles.startJobBtn} onPress={(e) => {
+                  e.stopPropagation();
+                  navigation.navigate('JobDetails', { job });
+                }}>
+                  <Text style={styles.startJobText}>Details</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#FFF" style={{ marginLeft: 5 }} />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
 
         {/* Padding for custom bottom bar */}
         <View style={{ height: 100 }} /> 

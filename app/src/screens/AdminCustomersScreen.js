@@ -1,26 +1,48 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import api from '../services/api';
 
 const { width } = Dimensions.get('window');
 
-const DEMO_CUSTOMERS = [
-  { id: '1', name: 'Meezan Bank Ltd', type: 'Corporate', initial: 'MB', sector: 'Banking', activeContracts: 3, value: '$12,500', color: '#002B5B' },
-  { id: '2', name: 'Agha Khan Hospital', type: 'Corporate', initial: 'AK', sector: 'Healthcare', activeContracts: 1, value: '$8,200', color: '#2F855A' },
-  { id: '3', name: 'John Doe', type: 'Residential', initial: 'JD', sector: 'Home', activeContracts: 0, value: '$450', color: '#007BFF' },
-  { id: '4', name: 'Zimplex IT Solutions', type: 'Corporate', initial: 'ZI', sector: 'IT Services', activeContracts: 2, value: '$4,100', color: '#D53F8C' },
-  { id: '5', name: 'Sara K.', type: 'Residential', initial: 'SK', sector: 'Home', activeContracts: 1, value: '$950', color: '#FF9800' },
-];
-
 export default function AdminCustomersScreen({ navigation }) {
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredCustomers = DEMO_CUSTOMERS.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.type.toLowerCase().includes(searchQuery.toLowerCase())
+  const fetchCustomers = async () => {
+    try {
+      const res = await api.get('/auth/customers');
+      if (res.data?.success) {
+        setCustomers(res.data.customers || []);
+      }
+    } catch (err) {
+      console.log('Error fetching customers:', err?.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchCustomers();
+  };
+
+  const filteredCustomers = customers.filter(c => 
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (c.type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.phone || '').includes(searchQuery)
   );
+
+  const corporateCount = customers.filter(c => c.type === 'Corporate').length;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -33,8 +55,8 @@ export default function AdminCustomersScreen({ navigation }) {
           <Text style={styles.title}>Customers</Text>
           <Text style={styles.subtitle}>Client Management</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn}>
-          <Ionicons name="add" size={24} color="#FFF" />
+        <TouchableOpacity style={styles.addBtn} onPress={onRefresh}>
+          <Ionicons name="refresh" size={20} color="#FFF" />
         </TouchableOpacity>
       </View>
 
@@ -43,7 +65,7 @@ export default function AdminCustomersScreen({ navigation }) {
         <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
         <TextInput 
           style={styles.searchInput}
-          placeholder="Search by name or type..."
+          placeholder="Search by name, phone or type..."
           placeholderTextColor="#888"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -53,32 +75,38 @@ export default function AdminCustomersScreen({ navigation }) {
       {/* Stats Quick View */}
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
-          <Text style={styles.statNum}>142</Text>
+          <Text style={styles.statNum}>{customers.length}</Text>
           <Text style={styles.statLabel}>Total Clients</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNum}>28</Text>
+          <Text style={styles.statNum}>{corporateCount}</Text>
           <Text style={styles.statLabel}>Corporate</Text>
         </View>
       </View>
 
       {/* List */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {filteredCustomers.length === 0 ? (
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+      >
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+        ) : filteredCustomers.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={48} color="#CCC" />
             <Text style={styles.emptyText}>No customers found.</Text>
           </View>
         ) : (
           filteredCustomers.map(customer => (
-            <TouchableOpacity key={customer.id} style={styles.customerCard}>
+            <TouchableOpacity key={customer.id || customer._id} style={styles.customerCard}>
               <View style={styles.cardHeader}>
-                <View style={[styles.avatar, { backgroundColor: customer.color + '20' }]}>
-                  <Text style={[styles.avatarText, { color: customer.color }]}>{customer.initial}</Text>
+                <View style={[styles.avatar, { backgroundColor: (customer.color || '#007BFF') + '20' }]}>
+                  <Text style={[styles.avatarText, { color: customer.color || '#007BFF' }]}>{customer.initial || 'C'}</Text>
                 </View>
                 <View style={styles.infoCol}>
                   <Text style={styles.nameText}>{customer.name}</Text>
-                  <Text style={styles.typeText}>{customer.type} • {customer.sector}</Text>
+                  <Text style={styles.typeText}>{customer.type} • {customer.phone || customer.sector}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#CBD5E0" />
               </View>
@@ -86,11 +114,11 @@ export default function AdminCustomersScreen({ navigation }) {
               <View style={styles.cardFooter}>
                 <View style={styles.footerItem}>
                   <Text style={styles.footerLabel}>Active Contracts</Text>
-                  <Text style={styles.footerValue}>{customer.activeContracts}</Text>
+                  <Text style={styles.footerValue}>{customer.activeContracts ?? 0}</Text>
                 </View>
                 <View style={styles.footerItemRight}>
                   <Text style={styles.footerLabel}>Lifetime Value</Text>
-                  <Text style={[styles.footerValue, { color: colors.primary }]}>{customer.value}</Text>
+                  <Text style={[styles.footerValue, { color: colors.primary }]}>{customer.value || 'Rs 0'}</Text>
                 </View>
               </View>
             </TouchableOpacity>
