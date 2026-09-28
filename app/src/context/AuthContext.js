@@ -25,8 +25,12 @@ export const AuthProvider = ({ children }) => {
             setIsAuthenticated(true);
             
             // Register for push notifications
-            const pushToken = await registerForPushNotificationsAsync();
-            if (pushToken) await savePushTokenToBackend(pushToken);
+            try {
+              const pushToken = await registerForPushNotificationsAsync();
+              if (pushToken) await savePushTokenToBackend(pushToken);
+            } catch (err) {
+              console.log('Push notification skip:', err?.message);
+            }
           } else {
             await AsyncStorage.removeItem('userToken');
           }
@@ -58,8 +62,12 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
 
         // Register push token
-        const pushToken = await registerForPushNotificationsAsync();
-        if (pushToken) await savePushTokenToBackend(pushToken);
+        try {
+          const pushToken = await registerForPushNotificationsAsync();
+          if (pushToken) await savePushTokenToBackend(pushToken);
+        } catch (err) {
+          console.log('Push notification skip:', err?.message);
+        }
 
         return { success: true };
       }
@@ -103,8 +111,12 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
 
         // Register push token
-        const pushToken = await registerForPushNotificationsAsync();
-        if (pushToken) await savePushTokenToBackend(pushToken);
+        try {
+          const pushToken = await registerForPushNotificationsAsync();
+          if (pushToken) await savePushTokenToBackend(pushToken);
+        } catch (err) {
+          console.log('Push notification skip:', err?.message);
+        }
 
         return { success: true };
       }
