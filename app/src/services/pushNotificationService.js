@@ -1,5 +1,4 @@
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import api from './api';
@@ -9,8 +8,11 @@ const isExpoGo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
   Constants.appOwnership === 'expo';
 
+let Notifications = null;
+
 if (!isExpoGo) {
   try {
+    Notifications = require('expo-notifications');
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,

@@ -1,13 +1,30 @@
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { GOOGLE_WEB_CLIENT_ID } from '../config/env';
+
+const isExpoGo =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+  Constants.appOwnership === 'expo';
+
+let GoogleSignin = null;
+if (!isExpoGo) {
+  try {
+    GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
+  } catch (e) {
+    console.log('[GoogleAuth] Native module not loaded:', e?.message);
+  }
+}
 
 let configured = false;
 
 // Safe to call multiple times / from multiple screens.
 export function configureGoogleSignin() {
-  if (configured) return;
-  GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
-  configured = true;
+  if (configured || !GoogleSignin) return;
+  try {
+    GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
+    configured = true;
+  } catch (e) {
+    console.log('[GoogleAuth] configure error:', e?.message);
+  }
 }
 
 // GoogleSignin.signIn() changed shape in v13: it now resolves to
@@ -15,6 +32,9 @@ export function configureGoogleSignin() {
 // resolved directly to the User. This normalises both so callers never have to
 // care which version is installed.
 export async function signInWithGoogle() {
+  if (isExpoGo || !GoogleSignin) {
+    throw new Error('Google Sign-In requires an APK build and is not supported in Expo Go.');
+  }
   configureGoogleSignin();
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
