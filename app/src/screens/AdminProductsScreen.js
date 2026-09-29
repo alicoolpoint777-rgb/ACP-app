@@ -66,9 +66,13 @@ export default function AdminProductsScreen() {
     }
     try {
       const res = await api.post('/products', {
-        ...newProduct,
+        title: newProduct.name,
+        name: newProduct.name,
+        description: newProduct.description,
         price: Number(newProduct.price),
-        stock: Number(newProduct.stock) || 0
+        stock: Number(newProduct.stock) || 1,
+        category: 'Split',
+        inStock: true,
       });
       if (res.data.success) {
         closeModal();
@@ -81,7 +85,7 @@ export default function AdminProductsScreen() {
   };
 
   const handleRemoveProduct = (id) => {
-    Alert.alert('Delete Product', 'Are you sure?', [
+    Alert.alert('Delete Product', 'Are you sure you want to delete this product?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
@@ -94,7 +98,10 @@ export default function AdminProductsScreen() {
     ]);
   };
 
-  const filteredProducts = products.filter(p => p.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredProducts = products.filter(p => 
+    (p.title || p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -102,10 +109,10 @@ export default function AdminProductsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Inventory</Text>
-          <Text style={styles.subtitle}>Manage AC Products</Text>
+          <Text style={styles.subtitle}>Manage AC Products ({products.length} Items)</Text>
         </View>
-        <TouchableOpacity style={styles.filterBtn}>
-          <Ionicons name="filter" size={20} color={colors.textPrimary} />
+        <TouchableOpacity style={styles.filterBtn} onPress={fetchProducts}>
+          <Ionicons name="refresh" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -124,8 +131,13 @@ export default function AdminProductsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {loading ? (
           <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 50 }} />
+        ) : filteredProducts.length === 0 ? (
+          <View style={{ alignItems: 'center', marginTop: 50 }}>
+            <Ionicons name="cube-outline" size={48} color="#CCC" />
+            <Text style={{ color: '#888', marginTop: 12 }}>No products found.</Text>
+          </View>
         ) : (
-          filteredProducts.map((product, index) => (
+          filteredProducts.map((product) => (
             <Animated.View 
               key={product._id} 
               style={[styles.productCard]}
@@ -137,7 +149,7 @@ export default function AdminProductsScreen() {
 
               <View style={styles.productInfo}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.productName}>{product.name}</Text>
+                  <Text style={styles.productName}>{product.title || product.name}</Text>
                   <TouchableOpacity onPress={() => handleRemoveProduct(product._id)}>
                     <Ionicons name="trash-outline" size={20} color="#FF4757" />
                   </TouchableOpacity>
