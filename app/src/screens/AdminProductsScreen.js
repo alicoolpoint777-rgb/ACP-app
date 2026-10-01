@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import api from '../services/api';
+import { getProductImage } from '../utils/imageHelper';
 
 const { width, height } = Dimensions.get('window');
+
+const CATEGORIES = ['Split', 'Window', 'Cassette', 'Floor Standing'];
 
 export default function AdminProductsScreen() {
   const [products, setProducts] = useState([]);
@@ -14,7 +17,14 @@ export default function AdminProductsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   
   // New Product State
-  const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', stock: '' });
+  const [newProduct, setNewProduct] = useState({ 
+    name: '', 
+    category: 'Split', 
+    description: '', 
+    imageUrl: '', 
+    price: '', 
+    stock: '1' 
+  });
   
   // Animations
   const itemTranslateX = useRef(new Animated.Value(0)).current; // Simplified for dynamic list
@@ -68,15 +78,16 @@ export default function AdminProductsScreen() {
       const res = await api.post('/products', {
         title: newProduct.name,
         name: newProduct.name,
+        category: newProduct.category || 'Split',
         description: newProduct.description,
+        imageUrl: newProduct.imageUrl || '',
         price: Number(newProduct.price),
         stock: Number(newProduct.stock) || 1,
-        category: 'Split',
         inStock: true,
       });
       if (res.data.success) {
         closeModal();
-        setNewProduct({ name: '', description: '', price: '', stock: '' });
+        setNewProduct({ name: '', category: 'Split', description: '', imageUrl: '', price: '', stock: '1' });
         fetchProducts();
       }
     } catch (e) {
@@ -100,7 +111,8 @@ export default function AdminProductsScreen() {
 
   const filteredProducts = products.filter(p => 
     (p.title || p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+    (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.category || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -120,7 +132,7 @@ export default function AdminProductsScreen() {
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
         <TextInput 
-          style={styles.searchInput}
+          style={styles.searchInput} 
           placeholder="Search products..."
           placeholderTextColor="#888"
           value={searchQuery}
@@ -143,8 +155,8 @@ export default function AdminProductsScreen() {
               style={[styles.productCard]}
             >
               {/* Image Thumbnail */}
-              <View style={[styles.imagePlaceholder, { backgroundColor: '#E0E7FF' }]}>
-                <Ionicons name="cube-outline" size={32} color={colors.primary} />
+              <View style={styles.imagePlaceholder}>
+                <Image source={getProductImage(product)} style={styles.productThumb} resizeMode="contain" />
               </View>
 
               <View style={styles.productInfo}>
@@ -154,10 +166,13 @@ export default function AdminProductsScreen() {
                     <Ionicons name="trash-outline" size={20} color="#FF4757" />
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.productType}>{product.description || 'No description'}</Text>
+                <View style={styles.categoryPill}>
+                  <Text style={styles.categoryPillText}>{product.category || 'AC'}</Text>
+                </View>
+                <Text style={styles.productType} numberOfLines={2}>{product.description || 'No description'}</Text>
                 
                 <View style={styles.bottomRow}>
-                  <Text style={styles.productPrice}>Rs {product.price}</Text>
+                  <Text style={styles.productPrice}>Rs {product.price?.toLocaleString?.() || product.price}</Text>
                   <View style={[styles.stockBadge, product.stock === 0 && styles.outOfStockBadge]}>
                     <Text style={[styles.stockText, product.stock === 0 && styles.outOfStockText]}>
                       {product.stock > 0 ? `${product.stock} in stock` : 'Out of Stock'}
@@ -186,7 +201,7 @@ export default function AdminProductsScreen() {
 
       {/* Add Product Modal */}
       <Modal visible={modalVisible} transparent animationType="fade">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <Animated.View style={[styles.modalContent, { transform: [{ scale: modalScale }] }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add New AC</Text>
@@ -195,56 +210,87 @@ export default function AdminProductsScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Name</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="e.g. PEL Inverter 1.5 Ton" 
-                placeholderTextColor="#AAA" 
-                value={newProduct.name}
-                onChangeText={(t) => setNewProduct({...newProduct, name: t})}
-              />
-            </View>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Description / Type</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="e.g. Floor Stand, Split" 
-                placeholderTextColor="#AAA" 
-                value={newProduct.description}
-                onChangeText={(t) => setNewProduct({...newProduct, description: t})}
-              />
-            </View>
-
-            <View style={styles.rowInputs}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
-                <Text style={styles.inputLabel}>Price (Rs)</Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 450 }}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Product Name</Text>
                 <TextInput 
                   style={styles.input} 
-                  placeholder="150000" 
-                  keyboardType="numeric" 
+                  placeholder="e.g. Window AC 1.5 Ton" 
                   placeholderTextColor="#AAA" 
-                  value={newProduct.price}
-                  onChangeText={(t) => setNewProduct({...newProduct, price: t})}
+                  value={newProduct.name}
+                  onChangeText={(t) => setNewProduct({...newProduct, name: t})}
                 />
               </View>
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 10 }]}>
-                <Text style={styles.inputLabel}>Stock</Text>
+
+              {/* Category Selection */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>AC Type / Category</Text>
+                <View style={styles.categoryRow}>
+                  {CATEGORIES.map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.catOption, newProduct.category === cat && styles.catOptionSelected]}
+                      onPress={() => setNewProduct({ ...newProduct, category: cat })}
+                    >
+                      <Text style={[styles.catOptionText, newProduct.category === cat && styles.catOptionTextSelected]}>
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Image URL (Optional)</Text>
                 <TextInput 
                   style={styles.input} 
-                  placeholder="10" 
-                  keyboardType="numeric" 
+                  placeholder="https://... or leave empty for auto icon" 
                   placeholderTextColor="#AAA" 
-                  value={newProduct.stock}
-                  onChangeText={(t) => setNewProduct({...newProduct, stock: t})}
+                  value={newProduct.imageUrl}
+                  onChangeText={(t) => setNewProduct({...newProduct, imageUrl: t})}
                 />
               </View>
-            </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Description / Specs</Text>
+                <TextInput 
+                  style={styles.input} 
+                  placeholder="e.g. Energy efficient, fast cooling inverter" 
+                  placeholderTextColor="#AAA" 
+                  value={newProduct.description}
+                  onChangeText={(t) => setNewProduct({...newProduct, description: t})}
+                />
+              </View>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProduct}>
-              <Text style={styles.saveBtnText}>Save Product</Text>
-            </TouchableOpacity>
+              <View style={styles.rowInputs}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
+                  <Text style={styles.inputLabel}>Price (Rs)</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    placeholder="150000" 
+                    keyboardType="numeric" 
+                    placeholderTextColor="#AAA" 
+                    value={newProduct.price}
+                    onChangeText={(t) => setNewProduct({...newProduct, price: t})}
+                  />
+                </View>
+                <View style={[styles.inputGroup, { flex: 1, marginLeft: 10 }]}>
+                  <Text style={styles.inputLabel}>Stock</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    placeholder="10" 
+                    keyboardType="numeric" 
+                    placeholderTextColor="#AAA" 
+                    value={newProduct.stock}
+                    onChangeText={(t) => setNewProduct({...newProduct, stock: t})}
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProduct}>
+                <Text style={styles.saveBtnText}>Save Product</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
@@ -327,11 +373,57 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#FFF',
+  },
+  productThumb: {
+    width: 75,
+    height: 75,
   },
   productInfo: {
     flex: 1,
     marginLeft: 15,
     justifyContent: 'space-between',
+  },
+  categoryPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0E7FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginVertical: 4,
+  },
+  categoryPillText: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: 'bold',
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 5,
+    gap: 8,
+  },
+  catOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F0F4F8',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 5,
+  },
+  catOptionSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  catOptionText: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '600',
+  },
+  catOptionTextSelected: {
+    color: '#FFF',
+    fontWeight: 'bold',
   },
   nameRow: {
     flexDirection: 'row',

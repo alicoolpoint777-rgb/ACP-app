@@ -7,10 +7,6 @@ import api from '../services/api';
 
 const { width } = Dimensions.get('window');
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
 const TABS = ['Service Requests', 'Product Purchases'];
 
 export default function AdminRequestsScreen() {
@@ -19,6 +15,7 @@ export default function AdminRequestsScreen() {
   const [assigningId, setAssigningId] = useState(null);
   
   const [bookings, setBookings] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,12 +26,14 @@ export default function AdminRequestsScreen() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [bookingsRes, techRes] = await Promise.all([
-        api.get('/bookings'),
-        api.get('/technicians')
+      const [bookingsRes, techRes, purchasesRes] = await Promise.all([
+        api.get('/bookings').catch(() => ({ data: { bookings: [] } })),
+        api.get('/technicians').catch(() => ({ data: { technicians: [] } })),
+        api.get('/purchases').catch(() => ({ data: { purchases: [] } })),
       ]);
-      if (bookingsRes.data.success) setBookings(bookingsRes.data.bookings);
-      if (techRes.data.success) setTechnicians(techRes.data.technicians);
+      if (bookingsRes.data?.success) setBookings(bookingsRes.data.bookings || []);
+      if (techRes.data?.success) setTechnicians(techRes.data.technicians || []);
+      if (purchasesRes.data?.success) setPurchases(purchasesRes.data.purchases || []);
     } catch (e) {
       console.log('Error fetching Admin Requests Data:', e);
     } finally {
@@ -148,11 +147,52 @@ export default function AdminRequestsScreen() {
     );
   };
 
+  const renderPurchaseTicket = (purchase) => {
+    const dateStr = purchase.createdAt ? new Date(purchase.createdAt).toDateString() : 'N/A';
+    return (
+      <View key={purchase._id} style={styles.ticketCard}>
+        <View style={styles.ticketTop}>
+          <View style={styles.ticketHeaderRow}>
+            <Text style={styles.serviceName}>{purchase.product?.title || purchase.product?.name || 'AC Unit'}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: '#E2FBE9' }]}>
+              <Text style={[styles.statusBadgeText, { color: '#2F855A' }]}>{(purchase.status || 'NEW').toUpperCase()}</Text>
+            </View>
+          </View>
+          <Text style={styles.customerName}>Customer: {purchase.name || purchase.customer?.name || 'Customer'}</Text>
+          <Text style={styles.unitsText}>Phone: {purchase.phone || 'N/A'}</Text>
+        </View>
+
+        <View style={styles.separatorContainer}>
+          <View style={styles.cutoutLeft} />
+          <View style={styles.dashedLine} />
+          <View style={styles.cutoutRight} />
+        </View>
+
+        <View style={styles.ticketBottom}>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar-outline" size={16} color="#888" />
+            <Text style={styles.infoText}>{dateStr}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="location-outline" size={16} color="#888" />
+            <Text style={styles.infoText}>{purchase.deliveryAddress || purchase.address || 'Address provided on call'}</Text>
+          </View>
+          {purchase.product?.price && (
+            <View style={styles.infoRow}>
+              <Ionicons name="cash-outline" size={16} color="#2F855A" />
+              <Text style={[styles.infoText, { fontWeight: 'bold', color: '#2F855A' }]}>Rs {purchase.product.price.toLocaleString()}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Bookings</Text>
+        <Text style={styles.title}>Bookings & Orders</Text>
         <Text style={styles.subtitle}>Overview & Dispatch</Text>
       </View>
 
@@ -165,7 +205,9 @@ export default function AdminRequestsScreen() {
               style={[styles.tabPill, activeTab === index && styles.tabPillActive]}
               onPress={() => handleTabPress(index)}
             >
-              <Text style={[styles.tabText, activeTab === index && styles.tabTextActive]}>{tab}</Text>
+              <Text style={[styles.tabText, activeTab === index && styles.tabTextActive]}>
+                {tab} ({index === 0 ? bookings.length : purchases.length})
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -181,20 +223,19 @@ export default function AdminRequestsScreen() {
         style={styles.pager}
       >
         {TABS.map((tab, index) => {
-          // For now all requests are considered 'Service Requests' in MVP
-          const tabBookings = index === 0 ? bookings : []; 
+          const items = index === 0 ? bookings : purchases; 
           return (
             <View key={tab} style={styles.page}>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.pageScrollContent}>
                 {loading ? (
                   <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 50 }} />
-                ) : tabBookings.length === 0 ? (
+                ) : items.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Ionicons name="file-tray-outline" size={48} color="#CCC" />
                     <Text style={styles.emptyText}>No {tab.toLowerCase()} found.</Text>
                   </View>
                 ) : (
-                  tabBookings.map(renderTicket)
+                  index === 0 ? items.map(renderTicket) : items.map(renderPurchaseTicket)
                 )}
                 <View style={{ height: 100 }} />
               </ScrollView>

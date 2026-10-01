@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import api from '../services/api';
+import { getServiceImage } from '../utils/imageHelper';
 
 const { width, height } = Dimensions.get('window');
 
@@ -127,9 +128,7 @@ export default function AdminServicesScreen() {
         ) : (
           filteredServices.map((service, index) => (
             <Animated.View key={service._id} style={[styles.serviceCard]}>
-              <View style={[styles.iconPlaceholder, { backgroundColor: '#E2FBE9' }]}>
-                <Ionicons name="construct-outline" size={32} color={colors.primary} />
-              </View>
+              <Image source={getServiceImage(service)} style={styles.serviceThumb} resizeMode="cover" />
 
               <View style={styles.serviceInfo}>
                 <View style={styles.nameRow}>
@@ -294,12 +293,10 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 3,
   },
-  iconPlaceholder: {
+  serviceThumb: {
     width: 60,
     height: 60,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   serviceInfo: {
     flex: 1,

@@ -7,11 +7,6 @@ import api from '../services/api';
 
 const { width } = Dimensions.get('window');
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
 export default function AdminTechniciansScreen() {
   const [techs, setTechs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +15,7 @@ export default function AdminTechniciansScreen() {
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newTech, setNewTech] = useState({ name: '', email: '', password: '', payoutType: 'salary', payoutAmount: '' });
+  const [newTech, setNewTech] = useState({ name: '', email: '', password: '', phone: '' });
 
   // List Animation
   const listOpacity = useRef(new Animated.Value(0)).current;
@@ -39,7 +34,7 @@ export default function AdminTechniciansScreen() {
       setLoading(true);
       const res = await api.get('/technicians');
       if (res.data.success) {
-        setTechs(res.data.technicians);
+        setTechs(res.data.technicians || []);
       }
     } catch (error) {
       console.log('Error fetching technicians:', error);
@@ -49,34 +44,48 @@ export default function AdminTechniciansScreen() {
   };
 
   const toggleExpand = (id) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    try {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    } catch (e) {}
     setExpandedId(expandedId === id ? null : id);
   };
 
   const renderStatusDot = (status) => {
-    let color = '#AAA'; // Offline
-    if (status === 'Available') color = '#2F855A'; // Green
-    if (status === 'On Job') color = '#DD6B20'; // Orange
+    let color = '#2F855A'; // Active / Available
+    if (status === 'On Job' || status === 'busy') color = '#DD6B20';
+    if (status === 'inactive') color = '#AAA';
     return <View style={[styles.statusDot, { backgroundColor: color }]} />;
   };
 
-  const filteredTechs = techs.filter(t => 
-    t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.status?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredTechs = (techs || []).filter(t => 
+    (t?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (t?.status || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (t?.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleAddTech = async () => {
-    if (!newTech.name || !newTech.email || !newTech.password) {
+    if (!newTech.name?.trim() || !newTech.email?.trim() || !newTech.password) {
       Alert.alert('Error', 'Please fill name, email and password');
       return;
     }
+    if (newTech.password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
     try {
-      const res = await api.post('/technicians', newTech);
+      const res = await api.post('/technicians', {
+        name: newTech.name.trim(),
+        email: newTech.email.trim().toLowerCase(),
+        password: newTech.password,
+        phone: newTech.phone?.trim() || '',
+        payoutType: 'salary',
+        payoutAmount: 0,
+      });
       if (res.data.success) {
         setShowAddModal(false);
-        setNewTech({ name: '', email: '', password: '', payoutType: 'salary', payoutAmount: '' });
+        setNewTech({ name: '', email: '', password: '', phone: '' });
         fetchTechs();
+        Alert.alert('Success', 'Technician added successfully');
       }
     } catch (e) {
       Alert.alert('Error', e.response?.data?.message || 'Failed to add technician');
@@ -84,14 +93,14 @@ export default function AdminTechniciansScreen() {
   };
 
   const handleRemoveTech = async (id) => {
-    Alert.alert('Remove Technician', 'Are you sure?', [
+    Alert.alert('Remove Technician', 'Are you sure you want to remove this technician?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
         try {
           await api.delete(`/technicians/${id}`);
           fetchTechs();
         } catch (e) {
-          Alert.alert('Error', 'Failed to remove technician');
+          Alert.alert('Error', e.response?.data?.message || 'Failed to remove technician');
         }
       }}
     ]);
@@ -141,12 +150,12 @@ export default function AdminTechniciansScreen() {
                 >
                   <View style={styles.cardHeaderLeft}>
                     <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{tech.name.charAt(0)}</Text>
-                      {renderStatusDot(tech.status)}
+                      <Text style={styles.avatarText}>{(tech?.name || 'T').charAt(0).toUpperCase()}</Text>
+                      {renderStatusDot(tech?.status)}
                     </View>
                     <View style={styles.info}>
-                      <Text style={styles.name}>{tech.name}</Text>
-                      <Text style={styles.statusText}>{tech.status} • {tech.completedJobs || 0} Jobs</Text>
+                      <Text style={styles.name}>{tech?.name || 'Technician'}</Text>
+                      <Text style={styles.statusText}>{tech?.status || 'Active'} • {tech?.completedJobs || 0} Jobs</Text>
                     </View>
                   </View>
                   <Ionicons 
@@ -164,11 +173,15 @@ export default function AdminTechniciansScreen() {
                     <View style={styles.statsRow}>
                       <View style={styles.statBox}>
                         <Text style={styles.statLabel}>Email</Text>
-                        <Text style={styles.statValue} style={{fontSize: 14, fontWeight:'bold', color:colors.textPrimary}}>{tech.email}</Text>
+                        <Text style={[styles.statValue, {fontSize: 14, fontWeight:'bold', color:colors.textPrimary}]}>{tech?.email || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Phone</Text>
+                        <Text style={[styles.statValue, {fontSize: 14, fontWeight:'bold', color:colors.textPrimary}]}>{tech?.phone || 'N/A'}</Text>
                       </View>
                       <View style={styles.statBox}>
                         <Text style={styles.statLabel}>Total Jobs</Text>
-                        <Text style={styles.statValue}>{tech.completedJobs || 0}</Text>
+                        <Text style={styles.statValue}>{tech?.completedJobs || 0}</Text>
                       </View>
                     </View>
 
@@ -193,7 +206,7 @@ export default function AdminTechniciansScreen() {
       {/* Add Tech Modal */}
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add New Technician</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
@@ -206,6 +219,7 @@ export default function AdminTechniciansScreen() {
               <TextInput 
                 style={styles.modalInput}
                 placeholder="Full Name"
+                placeholderTextColor="#999"
                 value={newTech.name}
                 onChangeText={(t) => setNewTech({...newTech, name: t})}
               />
@@ -214,16 +228,28 @@ export default function AdminTechniciansScreen() {
               <TextInput 
                 style={styles.modalInput}
                 placeholder="Email Address"
+                placeholderTextColor="#999"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={newTech.email}
                 onChangeText={(t) => setNewTech({...newTech, email: t})}
               />
 
+              <Text style={styles.inputLabel}>Phone (Optional)</Text>
+              <TextInput 
+                style={styles.modalInput}
+                placeholder="+92 300 1234567"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+                value={newTech.phone}
+                onChangeText={(t) => setNewTech({...newTech, phone: t})}
+              />
+
               <Text style={styles.inputLabel}>Password</Text>
               <TextInput 
                 style={styles.modalInput}
-                placeholder="Temporary Password"
+                placeholder="Password (minimum 6 characters)"
+                placeholderTextColor="#999"
                 secureTextEntry
                 value={newTech.password}
                 onChangeText={(t) => setNewTech({...newTech, password: t})}

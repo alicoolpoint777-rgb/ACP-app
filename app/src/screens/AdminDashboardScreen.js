@@ -1,61 +1,104 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import api from '../services/api';
 
 const { width } = Dimensions.get('window');
 
-// Simple custom hook/component for counting numbers
-const AnimatedCounter = ({ endValue, duration = 1000, prefix = '', suffix = '' }) => {
+const AnimatedCounter = ({ endValue, duration = 800, prefix = '', suffix = '' }) => {
   const [count, setCount] = useState(0);
   const animValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(animValue, {
-      toValue: endValue,
+      toValue: endValue || 0,
       duration: duration,
-      useNativeDriver: false, // We need to listen to value changes
+      useNativeDriver: false,
     }).start();
 
-    animValue.addListener((v) => {
+    const listener = animValue.addListener((v) => {
       setCount(Math.floor(v.value));
     });
 
     return () => {
-      animValue.removeAllListeners();
+      animValue.removeListener(listener);
     };
-  }, []);
+  }, [endValue]);
 
   return <Text style={styles.statValue}>{prefix}{count.toLocaleString()}{suffix}</Text>;
 };
 
-export default function AdminDashboardScreen() {
-  // Chart Animation
-  const chartBars = [40, 70, 45, 90, 60, 110, 85]; // representing heights
-  const barAnims = useRef(chartBars.map(() => new Animated.Value(0))).current;
+export default function AdminDashboardScreen({ navigation }) {
+  const [metrics, setMetrics] = useState({
+    pendingRequests: 0,
+    customersCount: 0,
+    techniciansCount: 0,
+    activeBookings: 0,
+    totalEarnings: 0,
+    recentRequests: [],
+    topTechnicians: [],
+  });
+  const [loading, setLoading] = useState(true);
 
-  // List Animation
+  // Animations
   const listOpacity = useRef(new Animated.Value(0)).current;
   const listTranslateY = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    // Staggered Bar Chart growth
-    const anims = barAnims.map((anim, index) => 
-      Animated.timing(anim, {
-        toValue: chartBars[index],
-        duration: 500,
-        useNativeDriver: false,
-      })
-    );
-    Animated.stagger(50, anims).start();
-
-    // Slide up recent activity
-    Animated.parallel([
-      Animated.timing(listOpacity, { toValue: 1, duration: 600, delay: 500, useNativeDriver: true }),
-      Animated.timing(listTranslateY, { toValue: 0, duration: 600, delay: 500, useNativeDriver: true }),
-    ]).start();
+    fetchDashboardData();
   }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const [bookingsRes, techRes, custRes] = await Promise.all([
+        api.get('/bookings').catch(() => ({ data: { bookings: [] } })),
+        api.get('/technicians').catch(() => ({ data: { technicians: [] } })),
+        api.get('/auth/customers').catch(() => ({ data: { customers: [] } })),
+      ]);
+
+      const bookings = bookingsRes.data?.bookings || [];
+      const techs = techRes.data?.technicians || [];
+      const customers = custRes.data?.customers || [];
+
+      const pending = bookings.filter(b => b.status === 'pending').length;
+      const active = bookings.filter(b => ['assigned', 'in_progress', 'confirmed'].includes(b.status)).length;
+      
+      const completed = bookings.filter(b => b.status === 'completed');
+      const earnings = completed.reduce((sum, b) => sum + (Number(b.price || b.totalAmount || 0)), 0);
+
+      const recent = bookings.slice(0, 5);
+      const topTechs = [...techs].sort((a, b) => (b.completedJobs || 0) - (a.completedJobs || 0)).slice(0, 3);
+
+      setMetrics({
+        pendingRequests: pending,
+        customersCount: customers.length,
+        techniciansCount: techs.length,
+        activeBookings: active,
+        totalEarnings: earnings,
+        recentRequests: recent,
+        topTechnicians: topTechs,
+      });
+
+      Animated.parallel([
+        Animated.timing(listOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(listTranslateY, { toValue: 0, duration: 500, useNativeDriver: true }),
+      ]).start();
+    } catch (e) {
+      console.log('Dashboard fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    if (status === 'completed') return '#2F855A';
+    if (status === 'assigned' || status === 'in_progress') return '#007BFF';
+    if (status === 'cancelled') return '#FF4757';
+    return '#FF9800'; // pending
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -63,129 +106,145 @@ export default function AdminDashboardScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Admin Panel</Text>
-          <Text style={styles.subtitle}>Overview & Analytics</Text>
+          <Text style={styles.subtitle}>Realtime Overview & Operations</Text>
         </View>
-        <TouchableOpacity style={styles.iconBtn}>
-          <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
-          <View style={styles.notificationDot} />
+        <TouchableOpacity style={styles.iconBtn} onPress={fetchDashboardData}>
+          <Ionicons name="refresh" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Top Metric Cards */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll}>
-          <View style={[styles.statCard, { backgroundColor: '#FF9800' }]}>
-            <Ionicons name="time-outline" size={24} color={colors.surface} />
-            <Text style={styles.statLabelLight}>Pending Requests</Text>
-            <AnimatedCounter endValue={12} prefix="" />
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons name="people-outline" size={24} color={colors.primary} />
-            <Text style={styles.statLabel}>Customers</Text>
-            <AnimatedCounter endValue={845} />
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons name="construct-outline" size={24} color={colors.primary} />
-            <Text style={styles.statLabel}>Technicians</Text>
-            <AnimatedCounter endValue={18} />
-          </View>
-
-          <View style={[styles.statCard, { backgroundColor: '#2F855A' }]}>
-            <Ionicons name="document-text-outline" size={24} color={colors.surface} />
-            <Text style={styles.statLabelLight}>Active AMCs</Text>
-            <AnimatedCounter endValue={42} />
-          </View>
-        </ScrollView>
-
-        {/* Revenue Overview */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Revenue Overview</Text>
-            <Text style={styles.growthText}>+12.5%</Text>
-          </View>
-          
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTotal}>Rs 2,450,000</Text>
-            <Text style={styles.chartSub}>Total Earnings</Text>
-            
-            <View style={styles.mockChartArea}>
-              <View style={[styles.mockBar, { height: 40 }]} />
-              <View style={[styles.mockBar, { height: 70 }]} />
-              <View style={[styles.mockBar, { height: 45 }]} />
-              <View style={[styles.mockBar, { height: 90 }]} />
-              <View style={[styles.mockBar, { height: 60 }]} />
-              <View style={[styles.mockBar, { height: 110 }]} />
-              <View style={[styles.mockBar, { height: 85, backgroundColor: colors.primary }]} />
-            </View>
-            <View style={styles.chartLabels}>
-              <Text style={styles.chartLabelText}>Mon</Text>
-              <Text style={styles.chartLabelText}>Tue</Text>
-              <Text style={styles.chartLabelText}>Wed</Text>
-              <Text style={styles.chartLabelText}>Thu</Text>
-              <Text style={styles.chartLabelText}>Fri</Text>
-              <Text style={styles.chartLabelText}>Sat</Text>
-              <Text style={styles.chartLabelText}>Sun</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Top Performers */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Top Performers</Text>
-            <TouchableOpacity><Text style={styles.seeAll}>View All</Text></TouchableOpacity>
-          </View>
-
-          <View style={styles.listCard}>
-            <View style={styles.listItem}>
-              <View style={styles.rankBadge}><Text style={styles.rankText}>1</Text></View>
-              <View style={styles.listAvatar}><Text style={styles.listAvatarText}>AH</Text></View>
-              <View style={styles.listInfo}>
-                <Text style={styles.listName}>Ali Hassan</Text>
-                <Text style={styles.listSub}>42 Jobs Completed</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+        ) : (
+          <>
+            {/* Top Metric Cards */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll}>
+              <View style={[styles.statCard, { backgroundColor: '#FF9800' }]}>
+                <Ionicons name="time-outline" size={24} color={colors.surface} />
+                <Text style={styles.statLabelLight}>Pending Requests</Text>
+                <AnimatedCounter endValue={metrics.pendingRequests} />
               </View>
-              <Text style={styles.listAmount}>Rs 45K</Text>
-            </View>
-            
-            <View style={[styles.listItem, { borderBottomWidth: 0 }]}>
-              <View style={[styles.rankBadge, { backgroundColor: '#CBD5E0' }]}><Text style={styles.rankText}>2</Text></View>
-              <View style={styles.listAvatar}><Text style={styles.listAvatarText}>BK</Text></View>
-              <View style={styles.listInfo}>
-                <Text style={styles.listName}>Bilal Khan</Text>
-                <Text style={styles.listSub}>38 Jobs Completed</Text>
-              </View>
-              <Text style={styles.listAmount}>Rs 39K</Text>
-            </View>
-          </View>
-        </View>
 
-        {/* Recent Activity */}
-        <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listTranslateY }], paddingHorizontal: 20 }}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Recent Requests</Text>
-            <Text style={styles.seeAll}>View All</Text>
-          </View>
+              <View style={styles.statCard}>
+                <Ionicons name="people-outline" size={24} color={colors.primary} />
+                <Text style={styles.statLabel}>Customers</Text>
+                <AnimatedCounter endValue={metrics.customersCount} />
+              </View>
 
-          {[
-            { id: '1', title: 'Deep Cleaning (2 Units)', customer: 'John Doe', time: '10 mins ago', status: 'Pending', color: '#FF9800' },
-            { id: '2', title: 'Product Purchase - 1.5 Ton AC', customer: 'Ahmed R.', time: '1 hour ago', status: 'Completed', color: '#2F855A' },
-            { id: '3', title: 'Gas Charging (1 Unit)', customer: 'Sara K.', time: '3 hours ago', status: 'Assigned', color: '#007BFF' },
-          ].map((item, index) => (
-            <View key={index} style={styles.activityCard}>
-              <View style={[styles.iconBox, { backgroundColor: item.color + '20' }]}>
-                <Ionicons name={item.status === 'Completed' ? "checkmark-circle" : "time"} size={24} color={item.color} />
+              <View style={styles.statCard}>
+                <Ionicons name="construct-outline" size={24} color={colors.primary} />
+                <Text style={styles.statLabel}>Technicians</Text>
+                <AnimatedCounter endValue={metrics.techniciansCount} />
               </View>
-              <View style={styles.activityInfo}>
-                <Text style={styles.activityTitle}>{item.title}</Text>
-                <Text style={styles.activitySub}>{item.customer} • {item.status}</Text>
+
+              <View style={[styles.statCard, { backgroundColor: '#2F855A' }]}>
+                <Ionicons name="calendar-outline" size={24} color={colors.surface} />
+                <Text style={styles.statLabelLight}>Active Jobs</Text>
+                <AnimatedCounter endValue={metrics.activeBookings} />
               </View>
-              <Text style={styles.activityTime}>{item.time}</Text>
+            </ScrollView>
+
+            {/* Earnings Summary Card */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Business Summary</Text>
+              </View>
+              
+              <View style={styles.chartCard}>
+                <Text style={styles.chartTotal}>Rs {metrics.totalEarnings.toLocaleString()}</Text>
+                <Text style={styles.chartSub}>Total Revenue from Completed Jobs</Text>
+                <View style={styles.summaryRow}>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNum}>{metrics.pendingRequests + metrics.activeBookings}</Text>
+                    <Text style={styles.summaryLabel}>Open Bookings</Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNum}>{metrics.techniciansCount}</Text>
+                    <Text style={styles.summaryLabel}>Staff On Team</Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNum}>{metrics.customersCount}</Text>
+                    <Text style={styles.summaryLabel}>Total Clients</Text>
+                  </View>
+                </View>
+              </View>
             </View>
-          ))}
-        </Animated.View>
+
+            {/* Team / Technicians */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Technicians Team</Text>
+                {navigation && (
+                  <TouchableOpacity onPress={() => navigation.navigate('Technicians')}>
+                    <Text style={styles.seeAll}>Manage Team</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.listCard}>
+                {metrics.topTechnicians.length === 0 ? (
+                  <Text style={styles.emptyText}>No technicians registered yet.</Text>
+                ) : (
+                  metrics.topTechnicians.map((tech, idx) => (
+                    <View key={tech._id || idx} style={[styles.listItem, idx === metrics.topTechnicians.length - 1 && { borderBottomWidth: 0 }]}>
+                      <View style={styles.rankBadge}><Text style={styles.rankText}>{idx + 1}</Text></View>
+                      <View style={styles.listAvatar}>
+                        <Text style={styles.listAvatarText}>{(tech.name || 'T').charAt(0).toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.listInfo}>
+                        <Text style={styles.listName}>{tech.name}</Text>
+                        <Text style={styles.listSub}>{tech.status || 'Active'} • {tech.phone || tech.email}</Text>
+                      </View>
+                      <Text style={styles.listAmount}>{tech.completedJobs || 0} Jobs</Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+
+            {/* Recent Requests */}
+            <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listTranslateY }] }}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Recent Requests</Text>
+                {navigation && (
+                  <TouchableOpacity onPress={() => navigation.navigate('Requests')}>
+                    <Text style={styles.seeAll}>View All</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {metrics.recentRequests.length === 0 ? (
+                <View style={styles.listCard}>
+                  <Text style={styles.emptyText}>No customer requests received yet.</Text>
+                </View>
+              ) : (
+                metrics.recentRequests.map((item, index) => {
+                  const statusColor = getStatusColor(item.status);
+                  const dateStr = item.scheduledDate ? new Date(item.scheduledDate).toLocaleDateString() : '';
+                  return (
+                    <View key={item._id || index} style={styles.activityCard}>
+                      <View style={[styles.iconBox, { backgroundColor: statusColor + '20' }]}>
+                        <Ionicons 
+                          name={item.status === 'completed' ? "checkmark-circle" : "time"} 
+                          size={24} 
+                          color={statusColor} 
+                        />
+                      </View>
+                      <View style={styles.activityInfo}>
+                        <Text style={styles.activityTitle}>{item.serviceName || item.service?.name || 'Service Request'}</Text>
+                        <Text style={styles.activitySub}>
+                          {item.customer?.name || 'Customer'} • <Text style={{ color: statusColor, fontWeight: 'bold' }}>{String(item.status || 'pending').toUpperCase()}</Text>
+                        </Text>
+                      </View>
+                      <Text style={styles.activityTime}>{dateStr || item.timeSlot || ''}</Text>
+                    </View>
+                  );
+                })
+              )}
+            </Animated.View>
+          </>
+        )}
         
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -217,9 +276,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   iconBtn: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -229,87 +288,62 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
-  notificationDot: {
-    position: 'absolute',
-    top: 10,
-    right: 12,
-    width: 8,
-    height: 8,
-    backgroundColor: '#FF6B6B',
-    borderRadius: 4,
-  },
   scrollContent: {
     paddingHorizontal: 20,
   },
   statsScroll: {
     overflow: 'visible',
-    marginBottom: 30,
+    marginBottom: 25,
   },
   statCard: {
-    width: 150,
-    height: 150,
+    width: 145,
+    height: 145,
     backgroundColor: '#FFF',
     borderRadius: 20,
-    padding: 20,
-    marginRight: 15,
+    padding: 18,
+    marginRight: 12,
     justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 3,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#888',
-    marginTop: 15,
+    marginTop: 10,
+    fontWeight: '600',
   },
   statLabelLight: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 15,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 10,
+    fontWeight: '600',
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: colors.textPrimary,
   },
-  chartSection: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
+  section: {
+    marginBottom: 25,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.textPrimary,
-    marginBottom: 20,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 12,
   },
   seeAll: {
     color: colors.primary,
     fontWeight: 'bold',
     fontSize: 14,
-  },
-  growthText: {
-    color: '#2F855A',
-    fontWeight: 'bold',
-    backgroundColor: '#E2FBE9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    fontSize: 12,
   },
   chartCard: {
     backgroundColor: '#FFF',
@@ -322,39 +356,36 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   chartTotal: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: 'bold',
     color: colors.textPrimary,
   },
   chartSub: {
     fontSize: 13,
     color: '#888',
-    marginBottom: 20,
+    marginTop: 2,
+    marginBottom: 18,
   },
-  mockChartArea: {
-    flexDirection: 'row',
-    height: 150,
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F4F8',
-    paddingBottom: 10,
-  },
-  mockBar: {
-    width: 30,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 6,
-  },
-  chartLabels: {
+  summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F4F8',
+    paddingTop: 15,
   },
-  chartLabelText: {
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryNum: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  summaryLabel: {
     fontSize: 11,
-    color: '#A0AEC0',
-    width: 30,
-    textAlign: 'center',
+    color: '#888',
+    marginTop: 3,
   },
   listCard: {
     backgroundColor: '#FFF',
@@ -399,6 +430,7 @@ const styles = StyleSheet.create({
   listAvatarText: {
     color: colors.primary,
     fontWeight: 'bold',
+    fontSize: 16,
   },
   listInfo: {
     flex: 1,
@@ -414,15 +446,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   listAmount: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#2F855A',
+  },
+  emptyText: {
+    color: '#888',
+    textAlign: 'center',
+    paddingVertical: 15,
+    fontSize: 13,
   },
   activityCard: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
     borderRadius: 15,
-    padding: 15,
+    padding: 14,
     marginBottom: 10,
     alignItems: 'center',
     shadowColor: '#000',
@@ -437,10 +475,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
-  },
-  activityIcon: {
-    marginRight: 15,
+    marginRight: 12,
   },
   activityInfo: {
     flex: 1,
@@ -456,7 +491,7 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   activityTime: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#AAA',
     marginLeft: 10,
   }

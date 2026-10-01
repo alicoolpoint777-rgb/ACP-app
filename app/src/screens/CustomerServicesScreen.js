@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import api from '../services/api';
+import { getServiceImage } from '../utils/imageHelper';
 
 export default function CustomerServicesScreen({ navigation }) {
   const [services, setServices] = useState([]);
@@ -34,9 +35,7 @@ export default function CustomerServicesScreen({ navigation }) {
 
   const renderItem = ({ item }) => (
     <TouchableOpacity style={styles.serviceRow} onPress={() => navigation.navigate('BookingFlow', { service: item.name })}>
-      <View style={[styles.imageThumbnail, { backgroundColor: '#E2FBE9' }]}>
-        <Ionicons name="construct-outline" size={32} color={colors.primary} />
-      </View>
+      <Image source={getServiceImage(item)} style={styles.imageThumbnail} resizeMode="cover" />
       <View style={styles.textContainer}>
         <Text style={styles.serviceTitle}>{item.name}</Text>
         <Text style={styles.serviceSub}>{item.subtitle || 'Professional Service'}</Text>

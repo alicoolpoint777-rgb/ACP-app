@@ -40,6 +40,21 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.head('/health', (req, res) => {
+  res.status(200).end();
+});
+
+// Lightweight ping for cron-job.org / uptime monitors (keeps Render awake without exceeding response limits)
+app.get('/ping', (req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Content-Length', '2');
+  res.status(200).send('OK');
+});
+
+app.head('/ping', (req, res) => {
+  res.status(200).end();
+});
+
 app.get('/', (req, res) => {
   res.status(200).send(`Ali Cool Point API is running (db: ${dbStatus().state})`);
 });
