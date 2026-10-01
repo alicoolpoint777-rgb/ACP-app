@@ -22,9 +22,10 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "owner": "ali-cool-point",
     "extra": {
       "eas": {
-        "projectId": "f1c2a6b5-b92d-4cd5-a58a-a4322d7f2b1e"
+        "projectId": "bc8f9e56-bcf6-4106-8a8c-fa6099d0ffa9"
       }
     },
     "plugins": [

@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, ScrollView, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
@@ -11,6 +11,7 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { login, googleLogin } = useContext(AuthContext);
 
@@ -19,7 +20,7 @@ export default function LoginScreen({ navigation }) {
   }, []);
 
   const handleGoogleLogin = async () => {
-    if (googleLoading) return;
+    if (googleLoading || loading) return;
     setGoogleLoading(true);
     try {
       const { idToken } = await signInWithGoogle();
@@ -37,13 +38,19 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (loading || googleLoading) return;
+    if (!email.trim() || !password) {
       Alert.alert('Error', 'Please enter email and password');
       return;
     }
-    const res = await login(email, password);
-    if (!res.success) {
-      Alert.alert('Login Failed', res.message);
+    setLoading(true);
+    try {
+      const res = await login(email.trim().toLowerCase(), password);
+      if (!res.success) {
+        Alert.alert('Login Failed', res.message);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -100,8 +107,16 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.forgotText}>Forgot Password?</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-              <Text style={styles.loginBtnText}>Login</Text>
+            <TouchableOpacity 
+              style={[styles.loginBtn, loading && { opacity: 0.8 }]} 
+              onPress={handleLogin}
+              disabled={loading || googleLoading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.loginBtnText}>Login</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -113,9 +128,19 @@ export default function LoginScreen({ navigation }) {
               <View style={styles.divider} />
             </View>
 
-            <TouchableOpacity style={styles.socialBtn} onPress={handleGoogleLogin}>
-              <Image source={{uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png'}} style={styles.socialIconImage} />
-              <Text style={styles.socialBtnText}>Continue with Google</Text>
+            <TouchableOpacity 
+              style={styles.socialBtn} 
+              onPress={handleGoogleLogin}
+              disabled={loading || googleLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color="#333" size="small" />
+              ) : (
+                <>
+                  <Image source={{uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png'}} style={styles.socialIconImage} />
+                  <Text style={styles.socialBtnText}>Continue with Google</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.socialBtn}>

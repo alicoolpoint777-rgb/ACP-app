@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useContext } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Animated, KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { colors } from '../theme/colors';
 import VectorIllustration from '../components/VectorIllustration';
 import { AuthContext } from '../context/AuthContext';
@@ -11,6 +11,7 @@ export default function SignUpScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   
   const { signup, googleLogin } = useContext(AuthContext);
@@ -27,7 +28,7 @@ export default function SignUpScreen({ navigation }) {
   }, [fadeAnim]);
 
   const handleGoogleLogin = async () => {
-    if (googleLoading) return;
+    if (googleLoading || loading) return;
     setGoogleLoading(true);
     try {
       const { idToken } = await signInWithGoogle();
@@ -45,13 +46,47 @@ export default function SignUpScreen({ navigation }) {
   };
 
   const handleSignUp = async () => {
-    if (!name || !email || !password) {
-      Alert.alert('Error', 'Please fill all fields');
+    if (loading || googleLoading) return;
+
+    if (!name.trim() || !email.trim() || !password) {
+      Alert.alert('Missing Details', 'Please enter your name, email, and password.');
       return;
     }
-    const res = await signup(name, email, password);
-    if (!res.success) {
-      Alert.alert('Signup Failed', res.message);
+
+    if (password.length < 6) {
+      Alert.alert('Weak Password', 'Password must be at least 6 characters long.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await signup(name.trim(), email.trim().toLowerCase(), password);
+      if (!res.success) {
+        // Check if account already exists
+        const errorMsg = (res.message || '').toLowerCase();
+        if (errorMsg.includes('already exists') || errorMsg.includes('already registered')) {
+          Alert.alert(
+            'Account Already Exists',
+            'An account with this email already exists. Please log in.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Log In', 
+                style: 'default',
+                onPress: () => navigation.navigate('Login') 
+              }
+            ]
+          );
+        } else {
+          Alert.alert('Signup Failed', res.message || 'Could not create account. Please try again.');
+        }
+      }
+      // If success, AuthContext sets isAuthenticated = true,
+      // which automatically loads CustomerStack without needing manual login!
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -111,8 +146,16 @@ export default function SignUpScreen({ navigation }) {
               />
             </View>
 
-            <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-              <Text style={styles.buttonText}>Sign up</Text>
+            <TouchableOpacity 
+              style={[styles.button, loading && { opacity: 0.8 }]} 
+              onPress={handleSignUp}
+              disabled={loading || googleLoading}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.textLight} />
+              ) : (
+                <Text style={styles.buttonText}>Sign up</Text>
+              )}
             </TouchableOpacity>
             
             <View style={styles.dividerRow}>
@@ -125,8 +168,16 @@ export default function SignUpScreen({ navigation }) {
               <TouchableOpacity style={styles.socialButton}>
                 <Text style={styles.socialButtonText}>Apple</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButtonLight} onPress={handleGoogleLogin}>
-                <Text style={styles.socialButtonTextDark}>Google</Text>
+              <TouchableOpacity 
+                style={styles.socialButtonLight} 
+                onPress={handleGoogleLogin}
+                disabled={loading || googleLoading}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color="#333" size="small" />
+                ) : (
+                  <Text style={styles.socialButtonTextDark}>Google</Text>
+                )}
               </TouchableOpacity>
             </View>
           </Animated.View>
