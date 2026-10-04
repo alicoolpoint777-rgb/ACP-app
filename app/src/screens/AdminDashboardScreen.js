@@ -176,7 +176,7 @@ export default function AdminDashboardScreen({ navigation }) {
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>Technicians Team</Text>
                 {navigation && (
-                  <TouchableOpacity onPress={() => navigation.navigate('Technicians')}>
+                  <TouchableOpacity onPress={() => navigation.navigate('Techs')}>
                     <Text style={styles.seeAll}>Manage Team</Text>
                   </TouchableOpacity>
                 )}

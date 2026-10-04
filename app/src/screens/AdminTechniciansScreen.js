@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, LayoutAnimation, Platform, UIManager, Dimensions, TextInput, Alert, Modal, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Dimensions, TextInput, Alert, Modal, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
@@ -16,25 +16,19 @@ export default function AdminTechniciansScreen() {
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTech, setNewTech] = useState({ name: '', email: '', password: '', phone: '' });
-
-  // List Animation
-  const listOpacity = useRef(new Animated.Value(0)).current;
-  const listTranslateY = useRef(new Animated.Value(50)).current;
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetchTechs();
-    Animated.parallel([
-      Animated.timing(listOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(listTranslateY, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start();
   }, []);
 
   const fetchTechs = async () => {
     try {
       setLoading(true);
       const res = await api.get('/technicians');
-      if (res.data.success) {
-        setTechs(res.data.technicians || []);
+      if (res?.data?.success) {
+        const list = res.data.technicians;
+        setTechs(Array.isArray(list) ? list.filter(Boolean) : []);
       }
     } catch (error) {
       console.log('Error fetching technicians:', error);
@@ -44,9 +38,6 @@ export default function AdminTechniciansScreen() {
   };
 
   const toggleExpand = (id) => {
-    try {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) {}
     setExpandedId(expandedId === id ? null : id);
   };
 
@@ -57,11 +48,19 @@ export default function AdminTechniciansScreen() {
     return <View style={[styles.statusDot, { backgroundColor: color }]} />;
   };
 
-  const filteredTechs = (techs || []).filter(t => 
-    (t?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t?.status || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t?.email || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTechs = (Array.isArray(techs) ? techs : []).filter(t => {
+    const query = (searchQuery || '').toLowerCase();
+    return (
+      (t?.name || '').toLowerCase().includes(query) ||
+      (t?.status || '').toLowerCase().includes(query) ||
+      (t?.email || '').toLowerCase().includes(query)
+    );
+  });
+
+  const getErrorMessage = (e, fallback) => {
+    const msg = e?.response?.data?.message;
+    return typeof msg === 'string' && msg.trim() ? msg : fallback;
+  };
 
   const handleAddTech = async () => {
     if (!newTech.name?.trim() || !newTech.email?.trim() || !newTech.password) {
@@ -72,7 +71,9 @@ export default function AdminTechniciansScreen() {
       Alert.alert('Error', 'Password must be at least 6 characters long');
       return;
     }
+    if (submitting) return;
     try {
+      setSubmitting(true);
       const res = await api.post('/technicians', {
         name: newTech.name.trim(),
         email: newTech.email.trim().toLowerCase(),
@@ -81,18 +82,26 @@ export default function AdminTechniciansScreen() {
         payoutType: 'salary',
         payoutAmount: 0,
       });
-      if (res.data.success) {
+      if (res?.data?.success) {
         setShowAddModal(false);
         setNewTech({ name: '', email: '', password: '', phone: '' });
         fetchTechs();
         Alert.alert('Success', 'Technician added successfully');
+      } else {
+        Alert.alert('Error', getErrorMessage({ response: res }, 'Failed to add technician'));
       }
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.message || 'Failed to add technician');
+      Alert.alert(
+        'Error',
+        getErrorMessage(e, 'Network error. Please check your connection and try again.')
+      );
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleRemoveTech = async (id) => {
+    if (!id) return;
     Alert.alert('Remove Technician', 'Are you sure you want to remove this technician?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
@@ -100,7 +109,7 @@ export default function AdminTechniciansScreen() {
           await api.delete(`/technicians/${id}`);
           fetchTechs();
         } catch (e) {
-          Alert.alert('Error', e.response?.data?.message || 'Failed to remove technician');
+          Alert.alert('Error', getErrorMessage(e, 'Failed to remove technician'));
         }
       }}
     ]);
@@ -136,17 +145,16 @@ export default function AdminTechniciansScreen() {
         {loading ? (
            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 50 }} />
         ) : (
-        <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listTranslateY }] }}>
-          
-          {filteredTechs.map((tech) => {
-            const isExpanded = expandedId === tech._id;
+        <View>
+          {filteredTechs.map((tech, index) => {
+            const isExpanded = expandedId === tech?._id;
 
             return (
-              <View key={tech._id} style={styles.techCard}>
+              <View key={tech?._id || `tech-${index}`} style={styles.techCard}>
                 <TouchableOpacity 
                   activeOpacity={0.8} 
                   style={styles.cardHeader}
-                  onPress={() => toggleExpand(tech._id)}
+                  onPress={() => toggleExpand(tech?._id)}
                 >
                   <View style={styles.cardHeaderLeft}>
                     <View style={styles.avatar}>
@@ -187,7 +195,7 @@ export default function AdminTechniciansScreen() {
 
                     <View style={styles.actionList}>
                       {/* Delete */}
-                      <TouchableOpacity style={[styles.actionListItem, { borderBottomWidth: 0 }]} onPress={() => handleRemoveTech(tech._id)}>
+                      <TouchableOpacity style={[styles.actionListItem, { borderBottomWidth: 0 }]} onPress={() => handleRemoveTech(tech?._id)}>
                         <Ionicons name="trash-outline" size={20} color="#FF4757" />
                         <Text style={[styles.actionListItemText, { color: '#FF4757' }]}>Remove Technician</Text>
                       </TouchableOpacity>
@@ -198,7 +206,7 @@ export default function AdminTechniciansScreen() {
             );
           })}
 
-        </Animated.View>
+        </View>
         )}
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -255,8 +263,16 @@ export default function AdminTechniciansScreen() {
                 onChangeText={(t) => setNewTech({...newTech, password: t})}
               />
 
-              <TouchableOpacity style={styles.saveBtn} onPress={handleAddTech}>
-                <Text style={styles.saveBtnText}>Save Technician</Text>
+              <TouchableOpacity
+                style={[styles.saveBtn, submitting && { opacity: 0.6 }]}
+                onPress={handleAddTech}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save Technician</Text>
+                )}
               </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>

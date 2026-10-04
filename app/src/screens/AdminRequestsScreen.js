@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, LayoutAnimation, Platform, UIManager, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, Platform, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
@@ -55,7 +55,6 @@ export default function AdminRequestsScreen() {
   };
 
   const toggleAssign = (id) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setAssigningId(assigningId === id ? null : id);
   };
 
@@ -84,7 +83,7 @@ export default function AdminRequestsScreen() {
           <View style={styles.ticketHeaderRow}>
             <Text style={styles.serviceName}>{booking.serviceName || booking.service?.name}</Text>
             <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>{booking.status.toUpperCase()}</Text>
+              <Text style={styles.statusBadgeText}>{(booking.status || 'pending').toUpperCase()}</Text>
             </View>
           </View>
           <Text style={styles.customerName}>Customer: {booking.customer?.name || 'Unknown'}</Text>
