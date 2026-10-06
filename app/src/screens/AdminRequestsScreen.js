@@ -112,14 +112,16 @@ export default function AdminRequestsScreen() {
             <Text style={styles.infoText}>{booking.address}</Text>
           </View>
 
-          {isService && booking.status === 'pending' && (
+          {isService && ['pending', 'confirmed', 'assigned'].includes(booking.status) && (
             <TouchableOpacity style={styles.assignBtn} onPress={() => toggleAssign(booking._id)}>
-              <Text style={styles.assignBtnText}>Assign Technician</Text>
+              <Text style={styles.assignBtnText}>
+                {booking.technicians?.length > 0 ? `Reassign (Assigned: ${booking.technicians[0]?.name})` : 'Assign Technician'}
+              </Text>
               <Ionicons name={isAssigning ? "chevron-up" : "chevron-down"} size={16} color="#FFF" style={{ marginLeft: 5 }} />
             </TouchableOpacity>
           )}
 
-          {isService && booking.status !== 'pending' && booking.technicians?.length > 0 && (
+          {isService && !['pending', 'confirmed', 'assigned'].includes(booking.status) && booking.technicians?.length > 0 && (
             <View style={styles.assignedTechView}>
               <Ionicons name="person-circle-outline" size={16} color={colors.primary} />
               <Text style={styles.assignedTechText}>Assigned to {booking.technicians[0].name}</Text>
@@ -127,7 +129,7 @@ export default function AdminRequestsScreen() {
           )}
 
           {/* Accordion Tech List */}
-          {isAssigning && isService && booking.status === 'pending' && (
+          {isAssigning && isService && ['pending', 'confirmed', 'assigned'].includes(booking.status) && (
             <View style={styles.techListWrapper}>
               <Text style={styles.techListHeader}>Available Technicians</Text>
               {technicians.map(tech => (

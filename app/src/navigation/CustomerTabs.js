@@ -7,8 +7,6 @@ import CustomerServicesScreen from '../screens/CustomerServicesScreen';
 import CustomerQuotesScreen from '../screens/CustomerQuotesScreen';
 import CustomerRequestsScreen from '../screens/CustomerRequestsScreen';
 import CustomerProfileScreen from '../screens/CustomerProfileScreen';
-import DummyCustomerScreen from '../screens/DummyCustomerScreen';
-// We will replace DummyCustomerScreen with actual screens as we build them
 
 const Tab = createBottomTabNavigator();
 

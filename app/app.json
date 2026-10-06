@@ -31,6 +31,13 @@
     "plugins": [
       "@react-native-google-signin/google-signin",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ACP to access your photos so you can attach before/after job evidence.",
+          "cameraPermission": "Allow ACP to use your camera so you can capture before/after job evidence."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

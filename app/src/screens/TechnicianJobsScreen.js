@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState, useContext } from 'react';
+import React, { useEffect, useRef, useState, useContext, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../theme/colors';
+import { useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
 
@@ -32,9 +33,14 @@ export default function TechnicianJobsScreen({ navigation }) {
     }
   };
 
-  useEffect(() => {
-    fetchJobs();
+  // Refetch whenever the screen regains focus (e.g. after completing a job).
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobs();
+    }, [])
+  );
 
+  useEffect(() => {
     const animations = cardTranslateYValues.map((val, index) => {
       return Animated.parallel([
         Animated.timing(val, {

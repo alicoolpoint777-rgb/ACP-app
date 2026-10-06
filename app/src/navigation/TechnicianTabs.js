@@ -42,7 +42,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
       
       {/* Floating Add Task Menu (Slides up from behind bar) */}
       <Animated.View style={[styles.floatingMenu, { transform: [{ translateY: menuTranslateY }], opacity: menuAnim }]}>
-        <TouchableOpacity style={styles.menuItem} onPress={() => { toggleMenu(); navigation.navigate('Tasks'); }}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => { toggleMenu(); navigation.navigate('Tasks', { openAdd: true }); }}>
           <Ionicons name="create-outline" size={20} color={colors.primary} />
           <Text style={styles.menuText}>Add Manual Task</Text>
         </TouchableOpacity>

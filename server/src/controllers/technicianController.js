@@ -145,16 +145,8 @@ const deleteTechnician = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Technician removed' });
 });
 
-// @desc  Technician profile: stats + reviews
-// @route GET /api/technicians/:id/profile
-// @access Private
-const technicianProfile = asyncHandler(async (req, res) => {
-  const technician = await User.findOne({ _id: req.params.id, role: 'technician' });
-  if (!technician) {
-    res.status(404);
-    throw new Error('Technician not found');
-  }
-
+// Shared shape for both the technician's own profile and the admin view.
+async function buildTechnicianProfile(technician) {
   const [reviews, upcoming, completed] = await Promise.all([
     Review.find({ technician: technician._id })
       .populate('customer', 'name')
@@ -170,18 +162,59 @@ const technicianProfile = asyncHandler(async (req, res) => {
     Booking.countDocuments({ technicians: technician._id, status: 'completed' }),
   ]);
 
-  res.json({
+  return {
     success: true,
     technician,
     stats: {
-      completedJobs: completed,
+      completedJobs: technician.completedJobs || completed,
       rating: technician.rating,
       ratingCount: technician.ratingCount,
       earnings: technician.earnings,
     },
     reviews,
     upcomingJobs: upcoming,
-  });
+  };
+}
+
+// @desc  The signed-in technician's own profile: stats + reviews
+// @route GET /api/technicians/me
+// @access Private (technician)
+const myTechnicianProfile = asyncHandler(async (req, res) => {
+  const technician = await User.findById(req.user._id);
+  if (!technician || technician.role !== 'technician') {
+    res.status(404);
+    throw new Error('Technician not found');
+  }
+  res.json(await buildTechnicianProfile(technician));
+});
+
+// @desc  Any technician's profile: stats + reviews
+// @route GET /api/technicians/:id/profile
+// @access Private (admin)
+const technicianProfile = asyncHandler(async (req, res) => {
+  const technician = await User.findOne({ _id: req.params.id, role: 'technician' });
+  if (!technician) {
+    res.status(404);
+    throw new Error('Technician not found');
+  }
+  res.json(await buildTechnicianProfile(technician));
+});
+
+// @desc  Technician updates their own availability status
+// @route PATCH /api/technicians/me/status
+// @access Private (technician)
+const updateMyStatus = asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  if (!['active', 'on_leave'].includes(status)) {
+    res.status(400);
+    throw new Error('Status must be active or on_leave');
+  }
+  const technician = await User.findByIdAndUpdate(
+    req.user._id,
+    { status },
+    { new: true }
+  );
+  res.json({ success: true, technician });
 });
 
 module.exports = {
@@ -189,5 +222,8 @@ module.exports = {
   createTechnician,
   updateTechnician,
   deleteTechnician,
+  myTechnicianProfile,
   technicianProfile,
+  updateMyStatus,
 };
+

@@ -53,21 +53,25 @@ export default function AdminDashboardScreen({ navigation }) {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [bookingsRes, techRes, custRes] = await Promise.all([
+      const [bookingsRes, techRes, custRes, purchasesRes] = await Promise.all([
         api.get('/bookings').catch(() => ({ data: { bookings: [] } })),
         api.get('/technicians').catch(() => ({ data: { technicians: [] } })),
         api.get('/auth/customers').catch(() => ({ data: { customers: [] } })),
+        api.get('/purchases').catch(() => ({ data: { purchases: [] } })),
       ]);
 
       const bookings = bookingsRes.data?.bookings || [];
       const techs = techRes.data?.technicians || [];
       const customers = custRes.data?.customers || [];
+      const purchases = purchasesRes.data?.purchases || [];
 
       const pending = bookings.filter(b => b.status === 'pending').length;
       const active = bookings.filter(b => ['assigned', 'in_progress', 'confirmed'].includes(b.status)).length;
       
-      const completed = bookings.filter(b => b.status === 'completed');
-      const earnings = completed.reduce((sum, b) => sum + (Number(b.price || b.totalAmount || 0)), 0);
+      const completedBookings = bookings.filter(b => b.status === 'completed');
+      const serviceEarnings = completedBookings.reduce((sum, b) => sum + (Number(b.price || b.totalAmount || 0)), 0);
+      const purchaseEarnings = purchases.reduce((sum, p) => sum + (Number(p.product?.price || p.price || 0)), 0);
+      const totalEarnings = serviceEarnings + purchaseEarnings;
 
       const recent = bookings.slice(0, 5);
       const topTechs = [...techs].sort((a, b) => (b.completedJobs || 0) - (a.completedJobs || 0)).slice(0, 3);
@@ -77,7 +81,7 @@ export default function AdminDashboardScreen({ navigation }) {
         customersCount: customers.length,
         techniciansCount: techs.length,
         activeBookings: active,
-        totalEarnings: earnings,
+        totalEarnings,
         recentRequests: recent,
         topTechnicians: topTechs,
       });

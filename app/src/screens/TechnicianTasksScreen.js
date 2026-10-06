@@ -1,18 +1,46 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Animated,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import api, { getErrorMessage } from '../services/api';
 
-const { width } = Dimensions.get('window');
-
-const MANUAL_TASKS = [
-  { id: '1', title: 'Buy AC Gas Cylinder', time: '08:00 AM - 09:00 AM', status: 'pending' },
-  { id: '2', title: 'Pick up spare PCB boards', time: '01:00 PM - 02:00 PM', status: 'pending' },
-];
-
-export default function TechnicianTasksScreen({ navigation }) {
+export default function TechnicianTasksScreen({ navigation, route }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newTask, setNewTask] = useState({ title: '', notes: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchTasks = useCallback(async () => {
+    try {
+      const res = await api.get('/tasks');
+      if (res.data?.success) {
+        setTasks(res.data.tasks || []);
+      }
+    } catch (err) {
+      console.log('Error fetching tasks:', err?.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -20,71 +48,204 @@ export default function TechnicianTasksScreen({ navigation }) {
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [fadeAnim]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
+
+  // The floating "+" on the tab bar navigates here with openAdd=true.
+  useEffect(() => {
+    if (route?.params?.openAdd) {
+      setShowAddModal(true);
+      navigation?.setParams({ openAdd: false });
+    }
+  }, [route?.params?.openAdd, navigation]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTasks();
+  };
+
+  const handleAddTask = async () => {
+    if (!newTask.title?.trim()) {
+      Alert.alert('Error', 'Please enter a task title');
+      return;
+    }
+    if (submitting) return;
+    try {
+      setSubmitting(true);
+      const res = await api.post('/tasks', {
+        title: newTask.title.trim(),
+        notes: newTask.notes?.trim() || '',
+      });
+      if (res.data?.success) {
+        setShowAddModal(false);
+        setNewTask({ title: '', notes: '' });
+        fetchTasks();
+      }
+    } catch (e) {
+      Alert.alert('Error', getErrorMessage(e, 'Could not add the task. Please try again.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggle = async (task) => {
+    // Optimistic update so the checkbox feels instant.
+    setTasks((prev) =>
+      prev.map((t) => (t._id === task._id ? { ...t, done: !t.done } : t))
+    );
+    try {
+      await api.patch(`/tasks/${task._id}`, { done: !task.done });
+    } catch (e) {
+      setTasks((prev) =>
+        prev.map((t) => (t._id === task._id ? { ...t, done: task.done } : t))
+      );
+      Alert.alert('Error', getErrorMessage(e, 'Could not update the task.'));
+    }
+  };
+
+  const handleDelete = (task) => {
+    Alert.alert('Delete Task', `Remove "${task.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.delete(`/tasks/${task._id}`);
+            setTasks((prev) => prev.filter((t) => t._id !== task._id));
+          } catch (e) {
+            Alert.alert('Error', getErrorMessage(e, 'Could not delete the task.'));
+          }
+        },
+      },
+    ]);
+  };
+
+  const pendingTasks = tasks.filter((t) => !t.done);
+  const doneTasks = tasks.filter((t) => t.done);
+
+  const renderTask = (task) => (
+    <View key={task._id} style={styles.taskCard}>
+      <TouchableOpacity style={styles.checkbox} onPress={() => handleToggle(task)}>
+        <Ionicons
+          name={task.done ? 'checkbox' : 'square-outline'}
+          size={24}
+          color={task.done ? '#48BB78' : '#A0AEC0'}
+        />
+      </TouchableOpacity>
+      <View style={styles.taskBody}>
+        <Text style={[styles.taskTitle, task.done && styles.taskTitleDone]}>{task.title}</Text>
+        {task.notes ? <Text style={styles.taskNotes}>{task.notes}</Text> : null}
+        {task.dueDate ? (
+          <Text style={styles.taskMeta}>
+            Due {new Date(task.dueDate).toLocaleDateString()}
+          </Text>
+        ) : null}
+      </View>
+      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(task)}>
+        <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>July 2026 ⌄</Text>
+          <Text style={styles.title}>My Tasks</Text>
+          <Text style={styles.subtitle}>Personal to-do list</Text>
         </View>
-        <TouchableOpacity style={styles.iconBtn}>
-          <Ionicons name="calendar-outline" size={24} color="#FFE5B4" />
+        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddModal(true)}>
+          <Ionicons name="add" size={22} color="#FFF" />
         </TouchableOpacity>
       </View>
 
       <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-        {/* Horizontal Dates */}
-        <View style={styles.datesRow}>
-          {['Sat', 'Sun', 'Mon', 'Tue', 'Wed'].map((day, i) => (
-            <View key={i} style={styles.dateCol}>
-              <Text style={styles.dayText}>{day}</Text>
-              <View style={[styles.dateCircle, i === 3 && styles.dateCircleActive]}>
-                <Text style={[styles.dateText, i === 3 && styles.dateTextActive]}>{13 + i}</Text>
-              </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        >
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          ) : tasks.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="list-outline" size={48} color="#A0AEC0" />
+              <Text style={styles.emptyText}>No tasks yet. Tap + to add one.</Text>
             </View>
-          ))}
-        </View>
+          ) : (
+            <>
+              <Text style={styles.sectionLabel}>TO DO ({pendingTasks.length})</Text>
+              {pendingTasks.length === 0 ? (
+                <Text style={styles.groupEmpty}>All caught up 🎉</Text>
+              ) : (
+                pendingTasks.map(renderTask)
+              )}
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <Text style={styles.timelineHeader}>TODAY'S TIMELINE</Text>
-          
-          <View style={styles.timelineContainer}>
-            {/* Timeline Line */}
-            <View style={styles.timelineLine} />
+              {doneTasks.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: 25 }]}>
+                    COMPLETED ({doneTasks.length})
+                  </Text>
+                  {doneTasks.map(renderTask)}
+                </>
+              )}
+            </>
+          )}
 
-            {/* Task 1 */}
-            <View style={styles.timelineRow}>
-              <View style={styles.timeDot} />
-              <View style={styles.taskCard}>
-                <Text style={styles.taskTime}>10:00 AM - 12:00 PM</Text>
-                <Text style={styles.taskTitle}>Deep Cleaning (Assigned)</Text>
-              </View>
-            </View>
-
-            {/* Break / Manual Task */}
-            <View style={styles.timelineRow}>
-              <View style={[styles.timeDot, { backgroundColor: '#FF6B6B' }]} />
-              <View style={[styles.taskCard, styles.manualTaskCard]}>
-                <Text style={styles.taskTime}>01:00 PM - 02:00 PM</Text>
-                <Text style={styles.taskTitle}>Buy AC Gas Cylinder</Text>
-              </View>
-            </View>
-            
-            {/* Task 2 */}
-            <View style={styles.timelineRow}>
-              <View style={styles.timeDot} />
-              <View style={styles.taskCard}>
-                <Text style={styles.taskTime}>02:00 PM - 04:00 PM</Text>
-                <Text style={styles.taskTitle}>Gas Charging (Assigned)</Text>
-              </View>
-            </View>
-
-          </View>
-          
-          <View style={{ height: 100 }} /> 
+          <View style={{ height: 100 }} />
         </ScrollView>
       </Animated.View>
+
+      <Modal visible={showAddModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalContainer}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Task</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Ionicons name="close" size={24} color="#888" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>Title</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. Buy AC Gas Cylinder"
+              placeholderTextColor="#999"
+              value={newTask.title}
+              onChangeText={(t) => setNewTask({ ...newTask, title: t })}
+            />
+
+            <Text style={styles.inputLabel}>Notes (Optional)</Text>
+            <TextInput
+              style={[styles.modalInput, { height: 90, textAlignVertical: 'top' }]}
+              placeholder="Any details..."
+              placeholderTextColor="#999"
+              multiline
+              value={newTask.notes}
+              onChangeText={(t) => setNewTask({ ...newTask, notes: t })}
+            />
+
+            <TouchableOpacity
+              style={[styles.saveBtn, submitting && { opacity: 0.6 }]}
+              onPress={handleAddTask}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.saveBtnText}>Add Task</Text>
+              )}
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -92,7 +253,7 @@ export default function TechnicianTasksScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F9FC', // Light background
+    backgroundColor: '#F7F9FC',
   },
   header: {
     flexDirection: 'row',
@@ -104,99 +265,49 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.textPrimary,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
   },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  datesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  dateCol: {
-    alignItems: 'center',
-  },
-  dayText: {
+  subtitle: {
     color: '#888',
-    fontSize: 12,
-    marginBottom: 10,
+    fontSize: 13,
+    marginTop: 2,
   },
-  dateCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF',
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  dateCircleActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  dateText: {
-    color: '#555',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  dateTextActive: {
-    color: '#FFF',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 4,
   },
   scrollContent: {
     paddingHorizontal: 20,
   },
-  timelineHeader: {
+  sectionLabel: {
     color: '#888',
     fontSize: 12,
     fontWeight: 'bold',
-    marginBottom: 20,
+    letterSpacing: 1,
+    marginBottom: 12,
   },
-  timelineContainer: {
-    position: 'relative',
-    paddingLeft: 20,
-  },
-  timelineLine: {
-    position: 'absolute',
-    left: 4,
-    top: 10,
-    bottom: 0,
-    width: 2,
-    backgroundColor: '#E2E8F0',
-  },
-  timelineRow: {
-    position: 'relative',
-    marginBottom: 30,
-  },
-  timeDot: {
-    position: 'absolute',
-    left: -20,
-    top: 15,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
-    borderWidth: 2,
-    borderColor: '#F7F9FC',
+  groupEmpty: {
+    color: '#A0AEC0',
+    fontSize: 14,
+    marginBottom: 10,
   },
   taskCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFF',
     borderRadius: 15,
     padding: 15,
-    marginLeft: 10,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#000',
@@ -205,21 +316,91 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
-  manualTaskCard: {
-    borderStyle: 'dashed',
-    borderColor: '#AAA',
-    backgroundColor: 'transparent',
-    shadowOpacity: 0,
-    elevation: 0,
+  checkbox: {
+    marginRight: 12,
   },
-  taskTime: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 5,
+  taskBody: {
+    flex: 1,
   },
   taskTitle: {
     color: colors.textPrimary,
     fontSize: 16,
     fontWeight: 'bold',
-  }
+  },
+  taskTitleDone: {
+    textDecorationLine: 'line-through',
+    color: '#A0AEC0',
+  },
+  taskNotes: {
+    color: '#718096',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  taskMeta: {
+    color: '#A0AEC0',
+    fontSize: 12,
+    marginTop: 6,
+  },
+  deleteBtn: {
+    padding: 5,
+    marginLeft: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    marginTop: 60,
+  },
+  emptyText: {
+    color: '#A0AEC0',
+    marginTop: 12,
+    fontSize: 15,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    padding: 25,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 5,
+    fontWeight: '600',
+  },
+  modalInput: {
+    backgroundColor: '#F5F7FA',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  saveBtn: {
+    backgroundColor: colors.primary,
+    padding: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 5,
+    marginBottom: 15,
+  },
+  saveBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });

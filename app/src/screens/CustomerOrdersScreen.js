@@ -15,14 +15,22 @@ export default function CustomerOrdersScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const { userData, logout } = useContext(AuthContext);
 
+  const [purchases, setPurchases] = useState([]);
+
   const fetchCustomerBookings = async () => {
     try {
-      const res = await api.get('/bookings');
-      if (res.data?.success) {
-        setBookings(res.data.bookings || []);
+      const [bookingsRes, purchasesRes] = await Promise.all([
+        api.get('/bookings').catch(() => ({ data: { bookings: [] } })),
+        api.get('/purchases').catch(() => ({ data: { purchases: [] } })),
+      ]);
+      if (bookingsRes.data?.success) {
+        setBookings(bookingsRes.data.bookings || []);
+      }
+      if (purchasesRes.data?.success) {
+        setPurchases(purchasesRes.data.purchases || []);
       }
     } catch (err) {
-      console.log('Error fetching customer bookings:', err?.message);
+      console.log('Error fetching customer orders:', err?.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -45,15 +53,48 @@ export default function CustomerOrdersScreen({ navigation }) {
     ['completed', 'cancelled'].includes(b.status)
   );
 
-  const displayedList = activeTab === 'Active' ? activeBookings : historyBookings;
+  const activePurchases = purchases.filter(p => p.status !== 'completed' && p.status !== 'cancelled');
+  const historyPurchases = purchases.filter(p => p.status === 'completed' || p.status === 'cancelled');
+
+  const activeItems = [
+    ...activeBookings.map(b => ({ ...b, itemType: 'service' })),
+    ...activePurchases.map(p => ({
+      _id: p._id,
+      bookingNo: p.purchaseNo || 'AC SALE',
+      serviceName: p.productTitle || p.product?.title || 'AC Product Purchase',
+      scheduledDate: p.createdAt,
+      timeSlot: 'Delivery',
+      price: p.price || p.product?.price || 0,
+      status: p.status || 'new',
+      itemType: 'product',
+    }))
+  ];
+
+  const historyItems = [
+    ...historyBookings.map(b => ({ ...b, itemType: 'service' })),
+    ...historyPurchases.map(p => ({
+      _id: p._id,
+      bookingNo: p.purchaseNo || 'AC SALE',
+      serviceName: p.productTitle || p.product?.title || 'AC Product Purchase',
+      scheduledDate: p.createdAt,
+      timeSlot: 'Delivered',
+      price: p.price || p.product?.price || 0,
+      status: p.status || 'completed',
+      itemType: 'product',
+    }))
+  ];
+
+  const displayedList = activeTab === 'Active' ? activeItems : historyItems;
 
   const renderOrderCard = (order) => (
     <View key={order._id || order.id} style={styles.card}>
       <View style={styles.cardHeader}>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{order.bookingNo || 'Service'}</Text>
+        <View style={[styles.typeBadge, order.itemType === 'product' && { backgroundColor: '#E2FBE9' }]}>
+          <Text style={[styles.typeText, order.itemType === 'product' && { color: '#2F855A' }]}>
+            {order.bookingNo || (order.itemType === 'product' ? 'AC Purchase' : 'Service')}
+          </Text>
         </View>
-        <Text style={[styles.statusText, order.status === 'pending' ? styles.pendingText : styles.transitText]}>
+        <Text style={[styles.statusText, order.status === 'pending' || order.status === 'new' ? styles.pendingText : styles.transitText]}>
           {(order.status || 'Active').toUpperCase()}
         </Text>
       </View>
@@ -76,8 +117,8 @@ export default function CustomerOrdersScreen({ navigation }) {
       <View style={styles.footerRow}>
         <Text style={styles.price}>{order.price ? `Rs ${order.price.toLocaleString()}` : 'Rs 2,500'}</Text>
         <View style={styles.actionButtons}>
-          <View style={styles.trackBtn}>
-            <Text style={styles.trackBtnText}>{order.status === 'completed' ? 'Done' : 'Active'}</Text>
+          <View style={[styles.trackBtn, order.itemType === 'product' && { backgroundColor: '#2F855A' }]}>
+            <Text style={styles.trackBtnText}>{order.status === 'completed' ? 'Done' : (order.itemType === 'product' ? 'Order Placed' : 'Active')}</Text>
           </View>
         </View>
       </View>
@@ -109,7 +150,7 @@ export default function CustomerOrdersScreen({ navigation }) {
             <Text style={styles.profileEmail}>{userData?.email || 'customer@acp.com'}</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{activeBookings.length}</Text>
+            <Text style={styles.statValue}>{activeItems.length}</Text>
             <Text style={styles.statLabel}>Active Orders</Text>
           </View>
         </View>
