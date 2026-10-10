@@ -73,7 +73,7 @@ export default function CustomerHomeScreen({ navigation }) {
                   <MaterialCommunityIcons name="wrench" size={16} color="#FFF" />
                   <Text style={styles.heroBtnPrimaryText}>REQUEST SERVICE</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.heroBtnSecondary} onPress={() => navigation.navigate('Quotes')}>
+                <TouchableOpacity style={styles.heroBtnSecondary} onPress={() => navigation.navigate('Services')}>
                   <MaterialCommunityIcons name="file-document-outline" size={16} color="#007BFF" />
                   <Text style={styles.heroBtnSecondaryText}>GET A QUOTE</Text>
                 </TouchableOpacity>
@@ -105,7 +105,7 @@ export default function CustomerHomeScreen({ navigation }) {
               style={[styles.quickActionCard, { backgroundColor: action.bg }]}
               onPress={() => {
                 if(action.id === '1') navigation.navigate('BookingFlow');
-                else if(action.id === '2') navigation.navigate('Quotes');
+                else if(action.id === '2') navigation.navigate('Services');
               }}
             >
               <View style={styles.quickActionHeader}>

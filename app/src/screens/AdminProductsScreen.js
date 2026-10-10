@@ -1,13 +1,28 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Animated, TouchableOpacity, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Animated,
+  TouchableOpacity,
+  Dimensions,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
+  Image,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme/colors';
 import api from '../services/api';
 import { getProductImage } from '../utils/imageHelper';
 
-const { width, height } = Dimensions.get('window');
-
+const { width } = Dimensions.get('window');
 const CATEGORIES = ['Split', 'Window', 'Cassette', 'Floor Standing'];
 
 export default function AdminProductsScreen() {
@@ -15,19 +30,17 @@ export default function AdminProductsScreen() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // New Product State
-  const [newProduct, setNewProduct] = useState({ 
-    name: '', 
-    category: 'Split', 
-    description: '', 
-    imageUrl: '', 
-    price: '', 
-    stock: '1' 
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    category: 'Split',
+    description: '',
+    imageUrl: '',
+    price: '',
+    stock: '1',
   });
-  
-  // Animations
-  const itemTranslateX = useRef(new Animated.Value(0)).current; // Simplified for dynamic list
+
   const fabScale = useRef(new Animated.Value(1)).current;
   const modalScale = useRef(new Animated.Value(0)).current;
 
@@ -39,8 +52,8 @@ export default function AdminProductsScreen() {
     try {
       setLoading(true);
       const res = await api.get('/products');
-      if (res.data.success) {
-        setProducts(res.data.products);
+      if (res.data?.success) {
+        setProducts(res.data.products || []);
       }
     } catch (error) {
       console.log('Error fetching products:', error);
@@ -66,26 +79,49 @@ export default function AdminProductsScreen() {
     }).start(() => setModalVisible(false));
   };
 
+  const handlePickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow access to your photo gallery.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.5,
+        base64: true,
+      });
+      if (!result.canceled && result.assets?.length > 0) {
+        const asset = result.assets[0];
+        const dataUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        setNewProduct((prev) => ({ ...prev, imageUrl: dataUri }));
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Could not open photo gallery.');
+    }
+  };
+
   const handleFabPressIn = () => Animated.spring(fabScale, { toValue: 0.8, useNativeDriver: true }).start();
   const handleFabPressOut = () => Animated.spring(fabScale, { toValue: 1, friction: 3, useNativeDriver: true }).start();
 
   const handleSaveProduct = async () => {
-    if (!newProduct.name || !newProduct.price) {
+    if (!newProduct.name?.trim() || !newProduct.price) {
       Alert.alert('Error', 'Name and Price are required');
       return;
     }
     try {
       const res = await api.post('/products', {
-        title: newProduct.name,
-        name: newProduct.name,
+        title: newProduct.name.trim(),
+        name: newProduct.name.trim(),
         category: newProduct.category || 'Split',
-        description: newProduct.description,
+        description: newProduct.description?.trim() || '',
         imageUrl: newProduct.imageUrl || '',
         price: Number(newProduct.price),
         stock: Number(newProduct.stock) || 1,
         inStock: true,
       });
-      if (res.data.success) {
+      if (res.data?.success) {
         closeModal();
         setNewProduct({ name: '', category: 'Split', description: '', imageUrl: '', price: '', stock: '1' });
         fetchProducts();
@@ -98,21 +134,26 @@ export default function AdminProductsScreen() {
   const handleRemoveProduct = (id) => {
     Alert.alert('Delete Product', 'Are you sure you want to delete this product?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          await api.delete(`/products/${id}`);
-          fetchProducts();
-        } catch (e) {
-          Alert.alert('Error', 'Failed to delete product');
-        }
-      }}
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.delete(`/products/${id}`);
+            fetchProducts();
+          } catch (e) {
+            Alert.alert('Error', 'Failed to delete product');
+          }
+        },
+      },
     ]);
   };
 
-  const filteredProducts = products.filter(p => 
-    (p.title || p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.category || '').toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredProducts = products.filter(
+    (p) =>
+      (p.title || p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.category || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -131,8 +172,8 @@ export default function AdminProductsScreen() {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
-        <TextInput 
-          style={styles.searchInput} 
+        <TextInput
+          style={styles.searchInput}
           placeholder="Search products..."
           placeholderTextColor="#888"
           value={searchQuery}
@@ -150,11 +191,7 @@ export default function AdminProductsScreen() {
           </View>
         ) : (
           filteredProducts.map((product) => (
-            <Animated.View 
-              key={product._id} 
-              style={[styles.productCard]}
-            >
-              {/* Image Thumbnail */}
+            <View key={product._id} style={styles.productCard}>
               <View style={styles.imagePlaceholder}>
                 <Image source={getProductImage(product)} style={styles.productThumb} resizeMode="contain" />
               </View>
@@ -169,8 +206,10 @@ export default function AdminProductsScreen() {
                 <View style={styles.categoryPill}>
                   <Text style={styles.categoryPillText}>{product.category || 'AC'}</Text>
                 </View>
-                <Text style={styles.productType} numberOfLines={2}>{product.description || 'No description'}</Text>
-                
+                <Text style={styles.productType} numberOfLines={2}>
+                  {product.description || 'No description'}
+                </Text>
+
                 <View style={styles.bottomRow}>
                   <Text style={styles.productPrice}>Rs {product.price?.toLocaleString?.() || product.price}</Text>
                   <View style={[styles.stockBadge, product.stock === 0 && styles.outOfStockBadge]}>
@@ -180,14 +219,14 @@ export default function AdminProductsScreen() {
                   </View>
                 </View>
               </View>
-            </Animated.View>
+            </View>
           ))
         )}
         <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* Floating Action Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         activeOpacity={0.9}
         onPressIn={handleFabPressIn}
         onPressOut={handleFabPressOut}
@@ -204,7 +243,7 @@ export default function AdminProductsScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <Animated.View style={[styles.modalContent, { transform: [{ scale: modalScale }] }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New AC</Text>
+              <Text style={styles.modalTitle}>Add New AC Product</Text>
               <TouchableOpacity onPress={closeModal}>
                 <Ionicons name="close" size={24} color="#888" />
               </TouchableOpacity>
@@ -212,13 +251,13 @@ export default function AdminProductsScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 450 }}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Product Name</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="e.g. Window AC 1.5 Ton" 
-                  placeholderTextColor="#AAA" 
+                <Text style={styles.inputLabel}>Product Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Inverter Split AC 1.5 Ton"
+                  placeholderTextColor="#AAA"
                   value={newProduct.name}
-                  onChangeText={(t) => setNewProduct({...newProduct, name: t})}
+                  onChangeText={(t) => setNewProduct({ ...newProduct, name: t })}
                 />
               </View>
 
@@ -240,49 +279,52 @@ export default function AdminProductsScreen() {
                 </View>
               </View>
 
+              {/* Image Picker */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Image URL (Optional)</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="https://... or leave empty for auto icon" 
-                  placeholderTextColor="#AAA" 
-                  value={newProduct.imageUrl}
-                  onChangeText={(t) => setNewProduct({...newProduct, imageUrl: t})}
-                />
+                <Text style={styles.inputLabel}>Product Image</Text>
+                <TouchableOpacity style={styles.galleryPickBtn} onPress={handlePickImage}>
+                  <Ionicons name="image-outline" size={20} color={colors.primary} />
+                  <Text style={styles.galleryPickText}>
+                    {newProduct.imageUrl ? 'Photo Selected (Tap to Change)' : 'Pick Photo from Phone Gallery'}
+                  </Text>
+                </TouchableOpacity>
+                {newProduct.imageUrl ? (
+                  <Image source={{ uri: newProduct.imageUrl }} style={styles.previewImage} />
+                ) : null}
               </View>
-              
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Description / Specs</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="e.g. Energy efficient, fast cooling inverter" 
-                  placeholderTextColor="#AAA" 
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Energy efficient, fast cooling inverter"
+                  placeholderTextColor="#AAA"
                   value={newProduct.description}
-                  onChangeText={(t) => setNewProduct({...newProduct, description: t})}
+                  onChangeText={(t) => setNewProduct({ ...newProduct, description: t })}
                 />
               </View>
 
               <View style={styles.rowInputs}>
                 <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
-                  <Text style={styles.inputLabel}>Price (Rs)</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="150000" 
-                    keyboardType="numeric" 
-                    placeholderTextColor="#AAA" 
+                  <Text style={styles.inputLabel}>Price (Rs) *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="150000"
+                    keyboardType="numeric"
+                    placeholderTextColor="#AAA"
                     value={newProduct.price}
-                    onChangeText={(t) => setNewProduct({...newProduct, price: t})}
+                    onChangeText={(t) => setNewProduct({ ...newProduct, price: t })}
                   />
                 </View>
                 <View style={[styles.inputGroup, { flex: 1, marginLeft: 10 }]}>
                   <Text style={styles.inputLabel}>Stock</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="10" 
-                    keyboardType="numeric" 
-                    placeholderTextColor="#AAA" 
+                  <TextInput
+                    style={styles.input}
+                    placeholder="10"
+                    keyboardType="numeric"
+                    placeholderTextColor="#AAA"
                     value={newProduct.stock}
-                    onChangeText={(t) => setNewProduct({...newProduct, stock: t})}
+                    onChangeText={(t) => setNewProduct({ ...newProduct, stock: t })}
                   />
                 </View>
               </View>
@@ -294,7 +336,6 @@ export default function AdminProductsScreen() {
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
-
     </SafeAreaView>
   );
 }
@@ -537,6 +578,28 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textPrimary,
   },
+  galleryPickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F8FF',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CCE5FF',
+  },
+  galleryPickText: {
+    color: colors.primary,
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginLeft: 8,
+  },
+  previewImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 10,
+    marginTop: 10,
+    resizeMode: 'cover',
+  },
   saveBtn: {
     backgroundColor: colors.primary,
     borderRadius: 10,
@@ -548,5 +611,5 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
-  }
+  },
 });

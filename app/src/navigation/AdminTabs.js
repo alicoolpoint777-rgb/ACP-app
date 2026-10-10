@@ -6,7 +6,7 @@ import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminTechniciansScreen from '../screens/AdminTechniciansScreen';
 import AdminRequestsScreen from '../screens/AdminRequestsScreen';
 import AdminProductsScreen from '../screens/AdminProductsScreen';
-import AdminMoreScreen from '../screens/AdminMoreScreen';
+import AdminServicesScreen from '../screens/AdminServicesScreen';
 import { colors } from '../theme/colors';
 
 const Tab = createBottomTabNavigator();
@@ -22,7 +22,7 @@ export default function AdminTabs() {
           else if (route.name === 'Requests') iconName = focused ? 'list' : 'list-outline';
           else if (route.name === 'Techs') iconName = focused ? 'people' : 'people-outline';
           else if (route.name === 'Products') iconName = focused ? 'cube' : 'cube-outline';
-          else if (route.name === 'More') iconName = focused ? 'menu' : 'menu-outline';
+          else if (route.name === 'Services') iconName = focused ? 'build' : 'build-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: colors.primary,
@@ -34,7 +34,7 @@ export default function AdminTabs() {
       <Tab.Screen name="Requests" component={AdminRequestsScreen} />
       <Tab.Screen name="Techs" component={AdminTechniciansScreen} />
       <Tab.Screen name="Products" component={AdminProductsScreen} />
-      <Tab.Screen name="More" component={AdminMoreScreen} />
+      <Tab.Screen name="Services" component={AdminServicesScreen} />
     </Tab.Navigator>
   );
 }

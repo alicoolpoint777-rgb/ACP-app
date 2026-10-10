@@ -34,20 +34,7 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const timedOut =
-      error.code === 'ECONNABORTED' ||
-      error.code === 'ETIMEDOUT' ||
-      /timeout/i.test(error.message || '');
-
-    const base = timedOut
-      ? `The server at ${API_URL} did not respond within ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s.`
-      : `Server is not reachable at ${API_URL}.`;
-
-    const hint = IS_LOCAL_API
-      ? 'Check that the backend is running (npm run dev inside server/), that your phone is on the same Wi-Fi as the PC, and that Windows Firewall allows inbound TCP on that port.'
-      : `If this is a free hosting plan the server may be waking up - open ${API_URL.replace(/\/api\/?$/, '')}/health in a browser and try again.`;
-
-    error.friendlyMessage = `${base} ${hint}`;
+    error.friendlyMessage = 'No internet connection. Please check your network and try again.';
     return Promise.reject(error);
   }
 );

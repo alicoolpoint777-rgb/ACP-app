@@ -71,6 +71,16 @@ export default function AdminRequestsScreen() {
     }
   };
 
+  const markBookingComplete = async (bookingId) => {
+    try {
+      await api.put(`/bookings/${bookingId}/complete`, { afterImages: [] });
+      Alert.alert('Success', 'Job marked as Completed / Payment Received');
+      fetchData();
+    } catch (e) {
+      fetchData();
+    }
+  };
+
   const renderTicket = (booking) => {
     const isAssigning = assigningId === booking._id;
     const isService = true; // For now all bookings are services in this UI model
@@ -118,6 +128,13 @@ export default function AdminRequestsScreen() {
                 {booking.technicians?.length > 0 ? `Reassign (Assigned: ${booking.technicians[0]?.name})` : 'Assign Technician'}
               </Text>
               <Ionicons name={isAssigning ? "chevron-up" : "chevron-down"} size={16} color="#FFF" style={{ marginLeft: 5 }} />
+            </TouchableOpacity>
+          )}
+
+          {booking.status !== 'completed' && (
+            <TouchableOpacity style={[styles.assignBtn, { backgroundColor: '#2F855A', marginTop: 10 }]} onPress={() => markBookingComplete(booking._id)}>
+              <Ionicons name="checkmark-done" size={16} color="#FFF" style={{ marginRight: 5 }} />
+              <Text style={styles.assignBtnText}>Mark Payment / Work Complete</Text>
             </TouchableOpacity>
           )}
 
